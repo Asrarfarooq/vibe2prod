@@ -1,0 +1,28 @@
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/agents:$COMMIT_SHA", "agents"]
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/agents:$COMMIT_SHA"]
+
+  - id: deploy-hello-agent
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - beta
+      - run
+      - jobs
+      - deploy
+      - hello-agent
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/agents:$COMMIT_SHA
+      - --region=us-central1
+      - --functional-type=agent
+      - --identity-type=agent-identity
+      - --set-env-vars=AGENT=hello,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
+      - --max-retries=0
+      - --task-timeout=10m
+
+options:
+  logging: CLOUD_LOGGING_ONLY
