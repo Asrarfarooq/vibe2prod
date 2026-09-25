@@ -3,8 +3,8 @@ import type { Api, Artifact, Project, Run, RunEvent, RunSummary, Stage, StageKey
 import { ApiError } from "../api/client";
 
 const ME = "asrarfarooq@gcp.altostrat.com";
-const PROJECT_ID = "receipt-tracker";
-const REPO = "Asrarfarooq/receipt-tracker";
+const PROJECT_ID = "vibed-app";
+const REPO = "Asrarfarooq/vibed-app";
 const REPO_URL = `https://github.com/${REPO}`;
 const T0 = Date.now() - (12 * 60 + 41) * 1000;
 const at = (sec: number, base = T0) => new Date(base + sec * 1000).toISOString();
@@ -42,10 +42,10 @@ function stage(key: StageKey, patch: Partial<Stage>): Stage {
   };
 }
 
-const DESIGN_DOC = `# Receipt Tracker: production design
+const DESIGN_DOC = `# Vibed app: production design
 
 ## Context
-Receipt Tracker is an Express API with a Vite React client. Users photograph a receipt, Gemini extracts merchant, date, line items and total, and the result is stored per user. The AI Studio build runs as a single process with the Gemini key in client code and receipts in an in-memory array.
+The vibed app is an Express API with a Vite React client. Users photograph a receipt, Gemini extracts merchant, date, line items and total, and the result is stored per user. The AI Studio build runs as a single process with the Gemini key in client code and receipts in an in-memory array.
 
 ## Goals
 - Serve UI and API from one Cloud Run service with no public keys in the bundle.
@@ -117,14 +117,14 @@ resource "google_storage_bucket" "images" {
 const PR_ARTIFACT: Artifact = {
   kind: "pr",
   title: "Remove hardcoded Gemini API key and add input validation",
-  url: "https://github.com/Asrarfarooq/receipt-tracker/pull/3",
+  url: "https://github.com/Asrarfarooq/vibed-app/pull/3",
   meta: { number: 3, additions: 214, deletions: 61, changed_files: 9, state: "open" },
 };
 
 const DOC_ARTIFACT: Artifact = {
   kind: "doc",
   title: "design/production.md",
-  url: "https://github.com/Asrarfarooq/receipt-tracker/blob/v2p/run-8f2c1a/design/production.md",
+  url: "https://github.com/Asrarfarooq/vibed-app/blob/v2p/run-8f2c1a/design/production.md",
   meta: { markdown: DESIGN_DOC },
 };
 
@@ -170,10 +170,10 @@ function mainRun(): Run {
     project_id: PROJECT_ID,
     project: "vibe2prod-509620",
     app: {
-      repo: "Asrarfarooq/receipt-tracker",
+      repo: "Asrarfarooq/vibed-app",
       branch: "main",
       commit: "3fa9c1e7b2d04a18c6e5f0b9d8a7c6e5f4a3b2c1",
-      url: "https://github.com/Asrarfarooq/receipt-tracker",
+      url: "https://github.com/Asrarfarooq/vibed-app",
     },
     status: "running",
     current_stage: "architect",
@@ -222,7 +222,7 @@ const AR = (t: number, kind: RunEvent["kind"], text: string, data: RunEvent["dat
 
 const SCRIPT: Ev[] = [
   CG(2, "status", "Stage started"),
-  CG(3.4, "tool_call", "clone_repo", { args: { repo: "Asrarfarooq/receipt-tracker", ref: "3fa9c1e" } }),
+  CG(3.4, "tool_call", "clone_repo", { args: { repo: "Asrarfarooq/vibed-app", ref: "3fa9c1e" } }),
   CG(6.1, "tool_result", "clone_repo", { result: { files: 48, bytes: 184213 } }),
   CG(7.8, "thought", "Scanning for secrets first. AI Studio exports usually call Gemini from the browser bundle."),
   CG(9.2, "tool_call", "gitleaks", { args: { command: "gitleaks detect --no-git --source . --report-format json" } }),
@@ -398,7 +398,7 @@ const run2DeployEvents: Ev[] = [
   DP(1130, "status", "Stage started"),
   DP(1133.2, "tool_call", "terraform", { args: { command: "terraform apply plan.out" } }),
   DP(1291.8, "tool_result", "terraform", { result: { added: 11, changed: 0, destroyed: 0 } }),
-  DP(1296.0, "tool_call", "cloud_build", { args: { image: "us-central1-docker.pkg.dev/vibe2prod-509620/apps/receipt-tracker:a07c3d9" } }),
+  DP(1296.0, "tool_call", "cloud_build", { args: { image: "us-central1-docker.pkg.dev/vibe2prod-509620/apps/vibed-app:a07c3d9" } }),
   DP(1508.4, "tool_result", "cloud_build", { result: { status: "SUCCESS", duration_s: 212 } }),
   DP(1512.1, "tool_call", "deploy_cloud_run", { args: { service: "app-run-71d0e4", region: "us-central1" } }),
   DP(1561.7, "tool_result", "deploy_cloud_run", { result: { revision: "app-run-71d0e4-00001-kqz", ready: true } }),
@@ -439,7 +439,7 @@ type ProjectBase = Omit<Project, "latest_run" | "score_history">;
 const PROJECTS: ProjectBase[] = [
   {
     id: PROJECT_ID,
-    name: "receipt-tracker",
+    name: "vibed-app",
     repo: REPO,
     repo_url: REPO_URL,
     branch: "main",
