@@ -20,6 +20,7 @@ steps:
       - --region=us-central1
       - --functional-type=agent
       - --identity-type=agent-identity
+      - --service-account=vibe2prod-agent-runtime@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=AGENT=hello,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
       - --max-retries=0
       - --task-timeout=10m
