@@ -13,7 +13,7 @@ def whoami() -> dict:
         METADATA_EMAIL_URL, headers={"Metadata-Flavor": "Google"}
     )
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310 - fixed metadata-server URL
+        with urllib.request.urlopen(request, timeout=5) as response:
             return {"identity": response.read().decode()}
     except OSError as err:
         return {"error": str(err)}
@@ -28,3 +28,22 @@ root_agent = LlmAgent(
         thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH)
     ),
 )
+
+
+async def main() -> int:
+    from google.adk.runners import InMemoryRunner
+
+    runner = InMemoryRunner(agent=root_agent, app_name="hello")
+    session = await runner.session_service.create_session(
+        app_name="hello", user_id="vibe2prod"
+    )
+    message = types.Content(role="user", parts=[types.Part(text="Start.")])
+    async for event in runner.run_async(
+        user_id="vibe2prod", session_id=session.id, new_message=message
+    ):
+        for part in (event.content.parts or []) if event.content else []:
+            if part.function_call:
+                print(f"[{event.author}] tool call: {part.function_call.name}")
+            elif part.text and not part.thought:
+                print(f"[{event.author}] {part.text}")
+    return 0

@@ -381,6 +381,7 @@ async def start_run(
                     "branch": project.get("branch", "main"),
                     "commit": None,
                     "url": project.get("repo_url"),
+                    "path": project.get("path", "."),
                 },
                 "status": "running",
                 "current_stage": STAGE_KEYS[0],
