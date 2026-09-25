@@ -1,0 +1,6 @@
+fastapi==0.141.1
+uvicorn==0.54.0
+google-cloud-firestore==2.32.0
+google-cloud-run==0.16.1
+google-auth==2.58.1
+requests==2.34.2

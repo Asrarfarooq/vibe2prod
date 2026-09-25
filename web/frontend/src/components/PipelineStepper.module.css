@@ -1,0 +1,315 @@
+.stepper {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.item {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.item[data-last] {
+  flex: 0.78 1 0;
+}
+
+.node {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: var(--space-3) var(--space-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition:
+    background-color var(--dur-hover) var(--ease),
+    border-color var(--dur-hover) var(--ease);
+}
+
+.node:hover {
+  background: var(--surface-2);
+}
+
+.node[aria-pressed="true"] {
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+.nodeTop {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.index {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.name {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node[data-status="queued"] .name,
+.node[data-status="skipped"] .name {
+  color: var(--text-muted);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.statusText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node[data-status="running"] .statusText {
+  color: var(--accent);
+}
+
+.node[data-status="awaiting_approval"] .statusText {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.node[data-status="failed"] .statusText,
+.node[data-status="denied"] .statusText {
+  color: var(--danger);
+}
+
+.dur {
+  color: var(--text-faint);
+}
+
+.dur::before {
+  content: "·";
+  margin-right: 6px;
+}
+
+/* Gate connector */
+.gate {
+  position: relative;
+  flex: 0 0 clamp(84px, 9vw, 128px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 var(--space-1);
+}
+
+.line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 11px);
+  height: 0;
+  border-top: 1px dashed var(--border);
+}
+
+.badge {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-faint);
+  transition:
+    background-color var(--dur-state) var(--ease),
+    border-color var(--dur-state) var(--ease),
+    color var(--dur-state) var(--ease);
+}
+
+.glyph {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--dur-state) var(--ease),
+    transform var(--dur-state) var(--ease);
+}
+
+.gateLabel {
+  position: relative;
+  z-index: 1;
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 16px;
+}
+
+.labelPart + .labelPart {
+  margin-left: 0.35em;
+}
+
+.gate[data-state="pending"] .lock {
+  opacity: 0.55;
+  transform: scale(0.85);
+}
+
+.gate[data-state="waiting"] .line {
+  border-top: 1px solid var(--warning);
+}
+
+.gate[data-state="waiting"] .badge {
+  background: var(--warning-soft);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.gate[data-state="waiting"] .lock {
+  opacity: 1;
+  transform: none;
+}
+
+.gate[data-state="waiting"] .gateLabel {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.gate[data-state="approved"] .line {
+  border-top: 1px solid var(--text-faint);
+}
+
+.gate[data-state="approved"] .badge {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.gate[data-state="approved"] .check {
+  opacity: 1;
+  transform: none;
+}
+
+.gate[data-state="approved"] .gateLabel {
+  color: var(--text-muted);
+}
+
+.gate[data-state="denied"] .line {
+  border-top: 1px solid var(--danger);
+}
+
+.gate[data-state="denied"] .badge {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.gate[data-state="denied"] .cross {
+  opacity: 1;
+  transform: none;
+}
+
+.gate[data-state="denied"] .gateLabel {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+@media (max-width: 1200px) {
+  .gate {
+    flex-basis: 72px;
+  }
+  .name,
+  .statusText {
+    white-space: normal;
+  }
+  .meta {
+    flex-wrap: wrap;
+    white-space: normal;
+    row-gap: 2px;
+  }
+  .dur {
+    flex-basis: 100%;
+    padding-left: 20px;
+  }
+  .dur::before {
+    content: none;
+  }
+  .gateLabel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .labelPart {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .gate[data-state="waiting"] .gateLabel,
+  .gate[data-state="pending"] .gateLabel {
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+@media (max-width: 860px) {
+  .list {
+    flex-direction: column;
+  }
+  .item,
+  .item[data-last] {
+    flex-direction: column;
+    flex: none;
+  }
+  .gate {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    height: 36px;
+    padding: 0 0 0 var(--space-3);
+    gap: var(--space-3);
+  }
+  .line {
+    left: calc(var(--space-3) + 11px);
+    right: auto;
+    top: 0;
+    bottom: 0;
+    height: auto;
+    width: 0;
+    border-top: 0 !important;
+    border-left: 1px dashed var(--border);
+  }
+  .gate[data-state="waiting"] .line {
+    border-left: 1px solid var(--warning);
+  }
+  .gate[data-state="approved"] .line {
+    border-left: 1px solid var(--text-faint);
+  }
+  .gate[data-state="denied"] .line {
+    border-left: 1px solid var(--danger);
+  }
+}

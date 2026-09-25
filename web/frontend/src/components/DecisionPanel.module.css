@@ -1,0 +1,233 @@
+.panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.label {
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.stageRef {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.idle {
+  color: var(--text-muted);
+}
+
+.waiting {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--fs-section);
+  line-height: 1.4;
+}
+
+.waiting strong {
+  font-weight: 600;
+}
+
+.lock {
+  flex: none;
+  color: var(--warning);
+  margin-top: 3px;
+}
+
+.summary {
+  color: var(--text-muted);
+  font-size: var(--fs-log);
+  line-height: 1.55;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.fieldLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 500;
+  font-size: var(--fs-log);
+}
+
+.optional {
+  font-weight: 400;
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
+.textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 76px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  transition: border-color var(--dur-hover) var(--ease);
+}
+
+.textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.textarea:hover {
+  border-color: var(--text-faint);
+}
+
+.textarea:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+  border-color: transparent;
+}
+
+.textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.hint {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
+.error {
+  font-size: var(--fs-log);
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.actions > .primary {
+  flex: 1 1 auto;
+}
+
+.primary,
+.danger {
+  white-space: nowrap;
+  height: 36px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: var(--fs-body);
+  transition:
+    background-color var(--dur-hover) var(--ease),
+    border-color var(--dur-hover) var(--ease),
+    color var(--dur-hover) var(--ease);
+}
+
+.primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.danger {
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--danger);
+}
+
+.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.primary:disabled,
+.danger:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.kbd {
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+
+.kbd kbd {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.record {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.recordIcon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--success);
+  color: var(--success);
+  animation: settle var(--dur-state) var(--ease);
+}
+
+.record[data-decision="deny"] .recordIcon {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
+.recordLine strong {
+  font-weight: 600;
+}
+
+.recordTime {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
+.reason {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-log);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}

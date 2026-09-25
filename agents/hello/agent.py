@@ -9,9 +9,11 @@ METADATA_EMAIL_URL = "http://metadata.google.internal/computeMetadata/v1/instanc
 
 def whoami() -> dict:
     """Returns the identity this job runs as, read from the metadata server."""
-    request = urllib.request.Request(METADATA_EMAIL_URL, headers={"Metadata-Flavor": "Google"})
+    request = urllib.request.Request(
+        METADATA_EMAIL_URL, headers={"Metadata-Flavor": "Google"}
+    )
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310 - fixed metadata-server URL
             return {"identity": response.read().decode()}
     except OSError as err:
         return {"error": str(err)}
@@ -22,5 +24,7 @@ root_agent = LlmAgent(
     model="gemini-3.8-flash",
     instruction="Call the whoami tool, then reply with one sentence stating the identity you run as.",
     tools=[whoami],
-    planner=BuiltInPlanner(thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH)),
+    planner=BuiltInPlanner(
+        thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH)
+    ),
 )

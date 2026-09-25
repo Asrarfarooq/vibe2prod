@@ -1,0 +1,96 @@
+@font-face {
+  font-family: "Google Sans Flex";
+  font-style: normal;
+  font-weight: 400 700;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("/fonts/GoogleSansFlex-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Google Sans Code";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/GoogleSansCode-latin.woff2") format("woff2");
+}
+
+:root {
+  --font-ui: "Google Sans Flex", ui-sans-serif, system-ui, sans-serif;
+  --font-code: "Google Sans Code", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --fs-micro: 12px;
+  --fs-log: 13px;
+  --fs-body: 14px;
+  --fs-section: 16px;
+  --fs-panel: 20px;
+  --fs-page: 28px;
+  --fs-score: 56px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --dur-hover: 120ms;
+  --dur-state: 180ms;
+  --dur-panel: 240ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --bg: #f6f7f9;
+  --surface-1: #ffffff;
+  --surface-2: #eef1f4;
+  --border: #cdd4dc;
+  --border-subtle: #e1e6eb;
+  --text: #12151a;
+  --text-muted: #56606c;
+  --text-faint: #7d8793;
+  --accent: #1f5fd6;
+  --accent-hover: #194fb4;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e6eefc;
+  --success: #1e8a5a;
+  --success-soft: #e3f3eb;
+  --warning: #a86a10;
+  --warning-soft: #fbf0dc;
+  --danger: #c8372f;
+  --danger-soft: #fbe7e5;
+  --focus: #1f5fd6;
+  --code-bg: #f1f3f6;
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #0f1115;
+  --surface-1: #16191e;
+  --surface-2: #1d2127;
+  --border: #313843;
+  --border-subtle: #252a32;
+  --text: #e7e9ec;
+  --text-muted: #9ba4af;
+  --text-faint: #717a86;
+  --accent: #5b96ff;
+  --accent-hover: #7aaaff;
+  --accent-contrast: #0b1220;
+  --accent-soft: #16233b;
+  --success: #3db47f;
+  --success-soft: #13261e;
+  --warning: #e3a63f;
+  --warning-soft: #2a2114;
+  --danger: #f0655e;
+  --danger-soft: #2c1717;
+  --focus: #5b96ff;
+  --code-bg: #12151a;
+
+  color-scheme: dark;
+}
