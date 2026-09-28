@@ -1,127 +1,159 @@
-# Production Architecture Design: app-vibed-app-3
+# Production Infrastructure Design: app-vibed-app-3
 
 ## Context
-The `vibed-app` is a lightweight full-stack application comprising an Express.js backend and a React single-page application (SPA) built with Vite. It features note-taking capabilities (`/api/notes`), AI-powered note summarization using the Gemini SDK (`/api/summarize`), file uploading and streaming (`/api/upload`, `/api/files/:name`), and a zip archive export endpoint (`/api/export`).
+The application `vibed-app-3` is a full-stack note-taking platform comprising an Express.js backend and a Vite-built React frontend bundled into a single Docker image. In its prototype state, the application retained note records in an in-memory array (`let notes = []`), saved uploaded media to a local `uploads/` directory on disk, executed shell commands to create zip archives (`execFile("zip", ...)`), and invoked Gemini summaries using an API key with model `gemini-2.5-flash`.
 
-Prior to this design, the app stored notes in an in-memory JavaScript array, stored uploaded files on the local filesystem (`uploads/`), invoked an external system CLI (`zip`) via `child_process.execFile` (which does not exist in the slim base image), and required a `GEMINI_API_KEY` environment variable. In this cloud-native design, all state is migrated to managed services (Firestore Native and Cloud Storage), AI summarization runs on Vertex AI via Application Default Credentials (ADC), administrative credentials are held in Secret Manager, and the service is deployed to Cloud Run.
+This design establishes production readiness on Google Cloud. The application runs on Google Cloud Run with scale-to-zero capabilities, persists note documents in a dedicated Firestore Native database (`app-vibed-app-3`), durably stores uploaded media and archives in a Google Cloud Storage bucket (`app-vibed-app-3-uploads`), transitions AI summarization to Vertex AI using `gemini-3.8-flash` authenticated through the platform runtime service account, and manages sensitive authorization tokens through Secret Manager.
 
 ## Architecture
 
-The service runs on Google Cloud Run in `us-central1`, fully stateless, scaling from 0 to 3 instances based on incoming request load. Ingress is open to the public (`INGRESS_TRAFFIC_ALL`) with `invoker_iam_disabled = true` to conform to the organization policy prohibiting `allUsers` IAM bindings.
+The architecture provisions Google Cloud resources strictly within project `vibe2prod-509620` and region `us-central1`. The single Cloud Run service `app-vibed-app-3` serves both static React frontend assets and backend API endpoints over HTTPS.
 
 ```mermaid
 flowchart TD
-    Client([User Browser]) -->|HTTP / HTTPS| CR[Cloud Run: app-vibed-app-3]
-    
-    subgraph Google Cloud: vibe2prod-509620 (us-central1)
-        CR -->|ADC IAM| VAI[Vertex AI Gemini API]
-        CR -->|ADC IAM / Datastore User| FS[(Firestore Native: app-vibed-app-3)]
-        CR -->|ADC IAM / Storage Object User| GCS[(Cloud Storage: app-vibed-app-3-uploads)]
-        CR -->|Secret Accessor at Startup| SM[Secret Manager: app-vibed-app-3-admin-token]
-    end
-    
-    subgraph Application Modules inside Container
-        SPA[React SPA Static Assets /dist]
-        Health[/healthz Health Probe]
-        NotesAPI[/api/notes API]
-        SummAPI[/api/summarize API]
-        FilesAPI[/api/upload & /api/files & /api/export]
-    end
-    
-    CR --- SPA
-    CR --- Health
-    CR --- NotesAPI
-    CR --- SummAPI
-    CR --- FilesAPI
+  Client[Web Browser / Client] -->|HTTPS| CloudRun[Cloud Run Service: app-vibed-app-3]
+  CloudRun -->|Read / Write Notes| Firestore[(Firestore Native DB: app-vibed-app-3)]
+  CloudRun -->|Store / Stream Files| GCS[(Cloud Storage: app-vibed-app-3-uploads)]
+  CloudRun -->|Mount Secret ADMIN_TOKEN| SecretMgr[Secret Manager: app-vibed-app-3-admin-token]
+  CloudRun -->|Summarize Notes: gemini-3.8-flash| VertexAI[Vertex AI Gemini API: global]
 ```
+
+### Components
+1. **Cloud Run Service (`app-vibed-app-3`)**:
+   - Serves React UI assets from `dist/` and handles API requests (`/api/notes`, `/api/summarize`, `/api/upload`, `/api/files/:name`, `/api/export`, `/health`).
+   - Sized for cost-effectiveness: 1 vCPU, 512MiB RAM, scaling between 0 and 5 instances, handling up to 80 concurrent requests per instance.
+   - Configured with `invoker_iam_disabled = true` and `ingress = INGRESS_TRAFFIC_ALL` to satisfy org policies forbidding `allUsers` IAM bindings while maintaining public accessibility.
+2. **Firestore Native Database (`app-vibed-app-3`)**:
+   - Created as a dedicated Firestore Native database in `us-central1` separate from the default project database.
+   - Stores persistent note documents in collection `notes`.
+3. **Cloud Storage Bucket (`app-vibed-app-3-uploads`)**:
+   - Regional GCS bucket in `us-central1` with uniform bucket-level access and enforced public access prevention.
+   - Stores user-uploaded media files and acts as the source for zip archive exports.
+4. **Secret Manager (`app-vibed-app-3-admin-token`)**:
+   - Houses the administrative token generated via Terraform `random_password`.
+   - Injected into Cloud Run as the environment variable `ADMIN_TOKEN`.
+5. **Vertex AI Integration**:
+   - Invokes model `gemini-3.8-flash` in location `global` via `@google/genai` using the runtime service account's default credentials.
 
 ## Data Flow
 
-1. **Static UI Delivery**: The browser requests `/`, and the Express server serves compiled Vite React assets from `/dist`.
-2. **Health Checking**: Cloud Run startup and liveness probes query `/healthz`, returning an immediate `200 OK` without touching external systems.
-3. **Note CRUD**: 
-   - `GET /api/notes`: Reads all note documents from the Firestore Native database `app-vibed-app-3` ordered by creation time.
-   - `POST /api/notes`: Validates input and persists a new note document to Firestore.
-   - `DELETE /api/notes/:id`: Validates the `x-admin-token` header against the secret `ADMIN_TOKEN` and deletes the document from Firestore.
-4. **AI Summarization**: `POST /api/summarize` retrieves note texts from Firestore, creates a prompt, and executes `ai.models.generateContent` against Gemini 2.5 Flash via Vertex AI in `us-central1` using the runtime service account's ADC.
-5. **File Management & Export**:
-   - `POST /api/upload`: Multer processes file in memory and streams it directly to Cloud Storage bucket `app-vibed-app-3-uploads`.
-   - `GET /api/files/:name`: Retrieves and streams the file object from the Cloud Storage bucket.
-   - `GET /api/export`: Queries the bucket for objects and uses the `archiver` Node.js library to stream a dynamically generated zip archive to the client.
+1. **Frontend & Health Routing**:
+   - HTTP GET requests to `/` or static assets serve compiled React bundles from local container memory.
+   - Cloud Run startup and liveness probes target `GET /health`, returning HTTP 200 with `{ status: "ok" }` without accessing external services.
+2. **Note Management**:
+   - `GET /api/notes`: Reads all documents from the `notes` collection in Firestore database `app-vibed-app-3` and returns an array of `{ id, text }`.
+   - `POST /api/notes`: Validates input text (non-empty string <= 5000 chars), writes document `{ id, text, createdAt }` to Firestore database `app-vibed-app-3`, and returns HTTP 201.
+   - `DELETE /api/notes/:id`: Checks `x-admin-token` header against the mounted `ADMIN_TOKEN` secret. On match, deletes the corresponding document in Firestore database `app-vibed-app-3` and returns `{ ok: true }`.
+3. **AI Summarization**:
+   - `POST /api/summarize`: Fetches current note texts from Firestore database `app-vibed-app-3`, constructs the summarization prompt, and dispatches a content generation request to Vertex AI model `gemini-3.8-flash` using service account ambient credentials. Returns `{ summary: response.text }`.
+4. **File Upload & Download**:
+   - `POST /api/upload`: Multer processes file in memory (`multer.memoryStorage()`), generates a secure random filename, streams buffer to Cloud Storage bucket `app-vibed-app-3-uploads`, and returns `{ name: filename }`.
+   - `GET /api/files/:name`: Verifies file exists in `app-vibed-app-3-uploads`, sets content type, and streams object data to client response.
+5. **Export Archive**:
+   - `GET /api/export?name=<archive_name>`: Lists objects in Cloud Storage bucket `app-vibed-app-3-uploads`, dynamically pipes each object stream into an `archiver` zip stream, and transmits the resulting zip archive to the client response, avoiding local shell commands and disk constraints.
 
 ## Security
 
-- **Service Identity**: The service executes under the identity of `vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com`. No personal credentials or API keys are embedded or configured.
-- **Zero API Keys**: Gemini API keys are completely removed. The Vertex AI SDK interacts with Google Cloud's control plane using the ambient service account identity.
-- **Database Isolation**: The runtime identity is granted `roles/datastore.user` with a CEL IAM condition restricting access exclusively to `projects/vibe2prod-509620/databases/app-vibed-app-3`, preventing access to the platform's default database.
-- **Secret Management**: The admin token is generated using Terraform `random_password`, stored in Secret Manager, and injected as an environment variable into the container. Plaintext values are never checked into version control.
-- **Public Access**: Public reachability is established using `invoker_iam_disabled = true`, preventing IAM violations against org policy.
-- **Container Hardening**: The container runs as non-root user `1000:1000`, using a pinned Node.js 20 slim image with Helmet security headers and CORS origin restrictions.
+- **Public Access Compliance**: The organization policy prohibits IAM bindings to `allUsers` or `allAuthenticatedUsers`. Public accessibility is accomplished by setting `invoker_iam_disabled = true` with `ingress = "INGRESS_TRAFFIC_ALL"` on the Cloud Run service resource.
+- **Least-Privilege IAM**: Runtime service account `vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com` is granted only necessary permissions:
+  - `roles/datastore.user` scoped by CEL condition strictly to `projects/vibe2prod-509620/databases/app-vibed-app-3`.
+  - `roles/storage.objectViewer` scoped directly to bucket `app-vibed-app-3-uploads` to read and list stored objects.
+  - `roles/storage.objectCreator` scoped directly to bucket `app-vibed-app-3-uploads` to upload new files without admin privileges.
+  - `roles/secretmanager.secretAccessor` scoped directly to secret `app-vibed-app-3-admin-token`.
+  - Vertex AI access is already granted via pre-existing `roles/aiplatform.user`.
+- **Secret Protection**: The `ADMIN_TOKEN` value is created using Terraform `random_password`, stored in Secret Manager, and exposed to the container exclusively as an environment variable reference.
+- **Storage Hardening**: The GCS bucket enforces uniform bucket-level access (`uniform_bucket_level_access = true`) and blocks public access (`public_access_prevention = "enforced"`).
+- **Container Security**: Container runs as non-root user `1000:1000` on a minimal `node:20.18.1-slim` base, with Helmet security headers enabled.
 
 ## IAM
 
-| Principal | Role | Resource | Condition | Purpose |
-|---|---|---|---|---|
-| `serviceAccount:vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com` | `roles/datastore.user` | `projects/vibe2prod-509620` | `resource.name == "projects/vibe2prod-509620/databases/app-vibed-app-3"` | Read/write permissions strictly scoped to the app's dedicated Firestore database. |
-| `serviceAccount:vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com` | `roles/storage.objectUser` | `app-vibed-app-3-uploads` | None | Manage object lifecycle (create, read, delete) in the uploads bucket. |
-| `serviceAccount:vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com` | `roles/secretmanager.secretAccessor` | `app-vibed-app-3-admin-token` | None | Read the administrative token secret version at instance initialization. |
+| Principal | Role | Resource | Condition | Justification |
+| :--- | :--- | :--- | :--- | :--- |
+| `serviceAccount:vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com` | `roles/datastore.user` | `projects/vibe2prod-509620` | `resource.name == "projects/vibe2prod-509620/databases/app-vibed-app-3"` | Read/write access to note documents in the dedicated Firestore database. |
+| `serviceAccount:vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com` | `roles/storage.objectViewer` | `app-vibed-app-3-uploads` | None | Read and list uploaded objects for downloads and zip archive exports. |
+| `serviceAccount:vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com` | `roles/storage.objectCreator` | `app-vibed-app-3-uploads` | None | Write new uploaded objects to the Cloud Storage bucket without administrative privileges. |
+| `serviceAccount:vibe2prod-app-runtime@vibe2prod-509620.iam.gserviceaccount.com` | `roles/secretmanager.secretAccessor` | `app-vibed-app-3-admin-token` | None | Allows container to resolve the admin token secret value at startup. |
 
-*(Note: `roles/aiplatform.user` is pre-granted to the runtime service account at the project level by the platform).* 
+*Note: The runtime service account already possesses `roles/aiplatform.user` at the project level.*
 
 ## Configuration
 
-### Environment Variables and Secrets
+### Environment Variables
 
-| Variable Name | Source | Value / Reference | Purpose |
-|---|---|---|---|
-| `PORT` | literal | `3000` | Port for Express HTTP server. |
-| `NODE_ENV` | literal | `production` | Optimizes Express and React for production runtime. |
-| `GOOGLE_CLOUD_PROJECT` | literal | `vibe2prod-509620` | Project identifier for GCP client SDKs. |
-| `FIRESTORE_DATABASE_ID` | literal | `app-vibed-app-3` | Specifies non-default Firestore database instance. |
-| `GCS_BUCKET_NAME` | literal | `app-vibed-app-3-uploads` | Identifies the GCS bucket for uploads. |
-| `VERTEX_AI_LOCATION` | literal | `us-central1` | Regional endpoint for Vertex AI Gemini model calls. |
-| `ADMIN_TOKEN` | secret | `app-vibed-app-3-admin-token:latest` | Authorization secret for administrative note deletion. |
+| Name | Source | Purpose | Value |
+| :--- | :--- | :--- | :--- |
+| `NODE_ENV` | literal | Enforces Node.js production performance mode | `production` |
+| `PORT` | literal | Port Express server listens on, matched to container_port | `3000` |
+| `ALLOWED_ORIGINS` | literal | Permits browser clients to access REST endpoints | `*` |
+| `GOOGLE_CLOUD_PROJECT` | literal | GCP project identifier for Firestore and Vertex AI | `vibe2prod-509620` |
+| `FIRESTORE_DATABASE_ID` | literal | Specifies the isolated Firestore database instance | `app-vibed-app-3` |
+| `GCS_BUCKET_NAME` | literal | Cloud Storage bucket storing file uploads | `app-vibed-app-3-uploads` |
+| `ADMIN_TOKEN` | secret | Header secret required for `DELETE /api/notes/:id` | Referenced from `app-vibed-app-3-admin-token` |
+
+### Secrets
+
+| Secret Name | Env Var | Purpose | Generation Source |
+| :--- | :--- | :--- | :--- |
+| `app-vibed-app-3-admin-token` | `ADMIN_TOKEN` | Authorizes administrative note deletion requests | `random_password` (32 characters, alphanumeric) |
 
 ## Cost Drivers
 
-- **Cloud Run Compute & Memory**: Sized at 1 vCPU and 512 MiB RAM. Scaled to 0 when idle to eliminate compute cost during inactivity. Active instances process concurrency up to 80 requests.
-- **Firestore Operations**: 4,000 document reads and 600 document writes monthly, coupled with ~0.05 GB storage.
-- **Cloud Storage**: 2.0 GB standard storage with ~200 Class A operations (uploads/lists) and ~600 Class B operations (reads).
-- **Vertex AI Gemini**: ~200 summarization invocations monthly, averaging 1,200 input tokens and 250 output tokens per call using `gemini-2.5-flash`.
-- **Secret Manager**: ~50 secret accesses per month corresponding to container cold starts.
-- **Network Egress**: ~15 KB average payload over 20,000 total requests (including health checks and static UI delivery).
+Cost drivers for this service are modeled by usage volume and quantities:
+1. **Cloud Run Compute & Memory**: vCPU-seconds and memory-seconds consumed during request processing. With `min_instance_count = 0`, instances scale to zero during idle periods, incurring charges only during active handling of ~30,000 monthly requests (including probes) averaging ~0.15s duration.
+2. **Cloud Storage**: Storage volume of ~1.5 GB for uploaded media, alongside Class A write/list operations (~500/month) and Class B read operations (~2,000/month).
+3. **Firestore Database**: Storage capacity for ~0.1 GB of note documents, with ~15,000 document read operations and ~2,500 document write/delete operations per month.
+4. **Vertex AI Summarization**: Monthly volume of ~500 content generation calls against `gemini-3.8-flash` with an average of 1,200 input tokens and 250 output tokens per summary.
+5. **Secret Manager**: Volume of ~200 secret access calls occurring upon container cold starts.
+6. **Network Egress**: Outbound data transfer for ~30,000 responses averaging ~20 KB each (~0.6 GB total egress).
 
 ## Operations and Observability
 
-- **Health Monitoring**: Startup and liveness probes monitor `/healthz` on port 3000. Probes execute every 15 seconds with a 3-strike failure threshold.
-- **Logging**: Express request logging and structured uncaught error logging stream directly to Cloud Logging via stdout and stderr.
-- **Metrics**: Cloud Monitoring automatically tracks Cloud Run request count, request latencies (p50, p95, p99), instance counts, CPU utilization, and container memory utilization.
-- **Budget Recommendation**: It is recommended that a project billing administrator configure a Cloud Billing alert for `vibe2prod-509620` with alert thresholds set at 50%, 80%, and 100% of the allocated monthly demo budget.
+- **Health Monitoring**: Dedicated probe route `GET /health` enables Cloud Run startup (evaluated every 5s after 2s delay) and liveness probes (evaluated every 15s) to guarantee zero-downtime routing without loading backing databases.
+- **Structured Logging**: Express application logs errors and operational metrics directly to standard output/error, captured automatically in Cloud Logging with trace context.
+- **Alerting Recommendations**: Although budget alerts require billing account permissions outside this pipeline, it is recommended that administrators configure a Cloud Monitoring alerting policy via the GCP console targeting container restart counts (`run.googleapis.com/container/restarts > 3`) and elevated 5xx HTTP response rates.
 
 ## Rollout
 
-1. Provision Firestore database `app-vibed-app-3` in `us-central1`.
-2. Create Cloud Storage bucket `app-vibed-app-3-uploads` with uniform bucket-level access.
-3. Generate administrative random password and create Secret Manager secret `app-vibed-app-3-admin-token`.
-4. Apply IAM bindings for Datastore, Storage, and Secret Manager.
-5. Deploy Cloud Run service `app-vibed-app-3` referencing the container image built with the required code changes.
-6. Verify `/healthz` returns `200 OK` and run end-to-end checks on `/api/notes`, `/api/upload`, and `/api/summarize`.
+1. **Terraform Apply**:
+   - Provision `random_password.app-vibed-app-3-admin-token-pass`.
+   - Create Secret Manager secret `app-vibed-app-3-admin-token` and version.
+   - Provision Firestore Native database `app-vibed-app-3` in `us-central1`.
+   - Provision Cloud Storage bucket `app-vibed-app-3-uploads` in `us-central1`.
+   - Establish IAM role bindings for `roles/datastore.user`, `roles/storage.objectViewer`, `roles/storage.objectCreator`, and `roles/secretmanager.secretAccessor`.
+   - Deploy Cloud Run service `app-vibed-app-3` with container configuration, environment variables, probes, and secret references.
+2. **Verification & Smoke Tests**:
+   - Verify probe health: `curl -f https://<service-url>/health`.
+   - Test note creation: `POST /api/notes` with JSON payload.
+   - Test note retrieval: `GET /api/notes`.
+   - Test summarization: `POST /api/summarize` verifying Vertex AI response.
+   - Test file upload: `POST /api/upload` verifying persistence in GCS.
+   - Test admin deletion: `DELETE /api/notes/<id>` with invalid and valid `x-admin-token`.
 
 ## Risks
 
-- **Cold Start Latency**: Scaling down to 0 instances saves costs but introduces 1 to 3 seconds of cold-start latency on the first request as Node.js initializes libraries.
-- **Export Memory Spikes**: The `/api/export` endpoint uses in-memory streaming via `archiver`. If users request large zip archives concurrently, memory could approach the 512 MiB ceiling.
-- **AI Regional Quotas**: Vertex AI `gemini-2.5-flash` calls in `us-central1` are subject to project quotas. If rate-limited, summary calls will return 500 errors.
+- **Cold Start Latency**: Scaling to zero can introduce a 1-3 second latency spike on initial cold starts. Mitigated by keeping container image size slim, minimizing imports, and setting fast startup probes.
+- **Large Zip Exports**: Exporting numerous large files simultaneously could strain container memory. Mitigated by streaming files directly through Node.js streams via `archiver` rather than buffering full archives in memory.
+- **Vertex AI Regional Outage / Quota**: Vertex AI Gemini 3.8 Flash is accessed via location `global`. If request limits or network throttles occur, exponential backoff handling in the application minimizes user disruption.
 
 ## Required Code Changes
 
-1. **`server.js`**:
-   - Implement `GET /healthz` endpoint returning `{ status: "ok" }` to fulfill Cloud Run probe checks.
-   - Initialize `@google/genai` with `{ vertexai: true, project: process.env.GOOGLE_CLOUD_PROJECT || 'vibe2prod-509620', location: process.env.VERTEX_AI_LOCATION || 'us-central1' }` and eliminate all references to `process.env.GEMINI_API_KEY`.
-   - Replace in-memory array operations with `@google-cloud/firestore` calls targeting `databaseId: process.env.FIRESTORE_DATABASE_ID`.
-   - Configure `multer` with `multer.memoryStorage()`, update `/api/upload` and `/api/files/:name` to stream to/from `@google-cloud/storage`, and update `/api/export` to generate zip streams using `archiver`.
-2. **`package.json`**:
-   - Add `@google-cloud/firestore` (`^7.11.0`), `@google-cloud/storage` (`^7.15.0`), and `archiver` (`^7.0.1`) to dependencies.
+1. **Dependencies (`package.json`)**:
+   - Add `@google-cloud/firestore` (`^7.11.0`), `@google-cloud/storage` (`^7.15.0`), and `archiver` (`^7.0.1`).
+2. **Firestore Integration (`server.js`)**:
+   - Initialize Firestore client targeting database ID `app-vibed-app-3`.
+   - Replace in-memory array manipulation in `GET /api/notes`, `POST /api/notes`, and `DELETE /api/notes/:id` with Firestore document operations against the `notes` collection.
+3. **Vertex AI Summarization (`server.js`)**:
+   - Update `GoogleGenAI` initialization to `{ vertexai: true, project: process.env.GOOGLE_CLOUD_PROJECT || 'vibe2prod-509620', location: 'global' }`.
+   - Change model target in `POST /api/summarize` to `gemini-3.8-flash` and aggregate notes from Firestore.
+   - Remove dependency on `process.env.GEMINI_API_KEY`.
+4. **Cloud Storage & Zip Archiving (`server.js`)**:
+   - Replace multer disk storage with `multer.memoryStorage()`.
+   - Write uploaded files directly to GCS bucket `app-vibed-app-3-uploads` and stream file reads from GCS in `GET /api/files/:name`.
+   - Rewrite `GET /api/export` to stream files from GCS into an `archiver` zip stream piped to the response, removing `child_process.execFile("zip", ...)`.
+5. **Health Check Route (`server.js`)**:
+   - Add endpoint `GET /health` returning `{ status: "ok" }` with HTTP 200 for probes.
+6. **CORS Configuration (`server.js`)**:
+   - Ensure CORS middleware accepts wildcard `*` origins to permit communication from browser clients accessing the Cloud Run service URL.
 
 ---
-Written by the Vibe2Prod Architect agent; independent critic approved after 1 round(s). A human approves before Terraform is written.
+Written by the Vibe2Prod Architect agent; independent critic approved after 2 round(s). A human approves before Terraform is written.
