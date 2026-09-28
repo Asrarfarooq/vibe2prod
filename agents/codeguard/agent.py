@@ -47,7 +47,7 @@ The app is in the current folder. Scanner findings are below. Fix the real secur
 - Fix injection (command, path traversal, XSS), add input validation, restrict CORS, stop leaking stack traces, listen on process.env.PORT.
 - Send standard security headers (e.g. helmet for Express) and stop advertising the framework (X-Powered-By).
 - Upgrade vulnerable dependencies in package.json to the version latest_version returns (never downgrade), adapt code to breaking changes, then call update_lockfile.
-- Harden the Dockerfile (pinned slim base image, non-root user, npm ci, no secrets copied).
+- Harden the Dockerfile (base image node:24-slim, the current Node LTS; non-root user, npm ci, no secrets copied). The Node version must satisfy the engines field of every dependency you install.
 Scanners miss things: read every source file and also fix security problems they did not report.
 Keep Gemini model ids exactly as the app has them; never switch to an older model.
 Keep changes minimal and keep the app working. Do not add features. Leave infrastructure (databases, auth providers, secret storage) to later stages and list it under remaining.

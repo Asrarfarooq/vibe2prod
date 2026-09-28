@@ -1,6 +1,11 @@
 import math
+import os
 import re
 
+import google.auth
+import google.oauth2.credentials
+from google.api_core.client_options import ClientOptions
+from google.auth.transport.requests import AuthorizedSession
 from google.cloud import billing_v1
 
 CLOUD_RUN = "152E-C115-5142"
@@ -29,13 +34,39 @@ FREE_TYPES = {
     "random_string",
 }
 DEFAULT_SECRET_ACCESSES = 1500
+PRICING_SA = os.environ.get(
+    "PRICING_SA", "vibe2prod-pricing@vibe2prod-509620.iam.gserviceaccount.com"
+)
+SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+
+def _pricing_credentials():
+    """Cloud Billing rejects Agent Identity tokens, so prices are read as a role-less pricing SA."""
+    source, _ = google.auth.default(scopes=[SCOPE])
+    session = AuthorizedSession(source)
+    session.configure_mtls_channel()
+    host = (
+        "iamcredentials.mtls.googleapis.com"
+        if session.is_mtls
+        else "iamcredentials.googleapis.com"
+    )
+    resp = session.post(
+        f"https://{host}/v1/projects/-/serviceAccounts/{PRICING_SA}:generateAccessToken",
+        json={"scope": [SCOPE], "lifetime": "3600s"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return google.oauth2.credentials.Credentials(resp.json()["accessToken"])
 
 
 class Catalog:
     """Live public list prices from the Cloud Billing Catalog API; no billing role is needed."""
 
     def __init__(self):
-        self._client = billing_v1.CloudCatalogClient()
+        self._client = billing_v1.CloudCatalogClient(
+            credentials=_pricing_credentials(),
+            client_options=ClientOptions(api_endpoint="cloudbilling.googleapis.com"),
+        )
         self._skus: dict[str, list] = {}
 
     def _list(self, service: str) -> list:

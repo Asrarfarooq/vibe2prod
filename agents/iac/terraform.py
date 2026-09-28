@@ -36,6 +36,7 @@ NAME_FIELDS = {
     "google_firestore_database": "name",
 }
 PUBLIC_MEMBERS = ("allUsers", "allAuthenticatedUsers")
+RESERVED_ENV = {"PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION"}
 MAX_ERRORS = 20
 
 
@@ -279,6 +280,13 @@ def policy(plan: dict, run_id: str) -> list[str]:
                 errors.append(
                     f"{addr}: template.service_account must be local.runtime_sa."
                 )
+            for c in tmpl.get("containers", []):
+                for env in c.get("env", []):
+                    name = env.get("name", {}).get("constant_value")
+                    if name in RESERVED_ENV:
+                        errors.append(
+                            f"{addr}: env {name} is reserved and set by Cloud Run; remove it."
+                        )
     if len(services) != 1:
         errors.append(
             f"Expected exactly one google_cloud_run_v2_service, found {len(services)}."
