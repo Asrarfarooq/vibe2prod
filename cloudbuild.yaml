@@ -105,5 +105,29 @@ steps:
       - --max-retries=0
       - --task-timeout=40m
 
+  - id: build-dashboard
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/dashboard:$COMMIT_SHA", "web"]
+
+  - id: push-dashboard
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/dashboard:$COMMIT_SHA"]
+
+  - id: deploy-dashboard
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - vibe2prod-dashboard
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/dashboard:$COMMIT_SHA
+      - --region=us-central1
+      - --service-account=vibe2prod-dashboard@$PROJECT_ID.iam.gserviceaccount.com
+      - --no-invoker-iam-check
+      - --set-secrets=APPROVER_KEYS=dashboard-approver-keys:latest
+      - --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,REGION=us-central1
+      - --timeout=3600
+      - --max-instances=3
+
 options:
   logging: CLOUD_LOGGING_ONLY
