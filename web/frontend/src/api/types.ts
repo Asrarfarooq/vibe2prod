@@ -67,6 +67,14 @@ export interface Stage {
   summary: string | null;
   decision: Decision | null;
   artifacts: Artifact[];
+  attempt: number;
+  feedback: Feedback | null;
+}
+
+export interface Feedback {
+  text: string;
+  by: string;
+  at: string;
 }
 
 export interface ScoreCategory {
@@ -158,4 +166,5 @@ export interface Api {
     reason: string | null,
     approverKey: string,
   ): Promise<Run>;
+  rerun(id: string, stage: StageKey, feedback: string, approverKey: string): Promise<Run>;
 }

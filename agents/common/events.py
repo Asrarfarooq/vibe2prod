@@ -30,6 +30,7 @@ class Emitter:
         )
         self._stage = run.stage
         self._seq: int | None = None
+        self.last_error = ""
 
     async def _next_seq(self) -> int:
         if self._seq is None:
@@ -56,6 +57,8 @@ class Emitter:
             "data": _clip(data) if data is not None else None,
             "ts": datetime.now(timezone.utc),
         }
+        if kind == "error":
+            self.last_error = text
         # The dashboard may also append events; retry on a seq collision.
         for _ in range(5):
             seq = await self._next_seq()

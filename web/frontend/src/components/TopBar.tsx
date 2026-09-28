@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { Link } from "./Link";
 import { useTheme } from "../lib/theme";
+import { approverKey, useHasApproverKey } from "../lib/approverKey";
 import { SunMoonGlyph } from "./Icons";
 import s from "./TopBar.module.css";
 
@@ -11,6 +12,7 @@ export interface Crumb {
 
 export function TopBar({ crumbs = [] }: { crumbs?: Crumb[] }) {
   const [theme, toggle] = useTheme();
+  const hasKey = useHasApproverKey();
   const dark = theme === "dark";
   return (
     <header className={s.bar}>
@@ -41,16 +43,23 @@ export function TopBar({ crumbs = [] }: { crumbs?: Crumb[] }) {
           </Fragment>
         ))}
       </nav>
-      <button
-        id="theme-toggle"
-        type="button"
-        className={s.iconBtn}
-        onClick={toggle}
-        aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
-        title={dark ? "Light theme" : "Dark theme"}
-      >
-        <SunMoonGlyph dark={dark} />
-      </button>
+      <div className={s.right}>
+        {hasKey && (
+          <button id="forget-key" type="button" className={s.textBtn} onClick={approverKey.forget} title="Approver key is kept in this tab until it closes">
+            Forget approver key
+          </button>
+        )}
+        <button
+          id="theme-toggle"
+          type="button"
+          className={s.iconBtn}
+          onClick={toggle}
+          aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+          title={dark ? "Light theme" : "Dark theme"}
+        >
+          <SunMoonGlyph dark={dark} />
+        </button>
+      </div>
     </header>
   );
 }

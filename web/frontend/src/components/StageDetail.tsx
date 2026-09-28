@@ -3,7 +3,8 @@ import type { RunEvent, Stage } from "../api/types";
 import { EventLog } from "./EventLog";
 import { ArtifactViewer } from "./Artifacts";
 import { StatusIcon } from "./Icons";
-import { absolute, clock } from "../lib/format";
+import { absolute, clock, handle } from "../lib/format";
+import { structured } from "../lib/structured";
 import s from "./StageDetail.module.css";
 
 export type Tab = "activity" | "artifacts" | "output";
@@ -29,7 +30,10 @@ export function StageDetail({ stage, index, events, tab, onTab }: Props) {
     for (let i = stageEvents.length - 1; i >= 0; i--) if (stageEvents[i].kind === "error") return stageEvents[i];
     return null;
   }, [stage.status, stageEvents]);
-  const origin = stage.started_at ? new Date(stage.started_at).getTime() : null;
+  const started = stage.started_at ? new Date(stage.started_at).getTime() : null;
+  const first = stageEvents[0] ? new Date(stageEvents[0].ts).getTime() : null;
+  // Reruns keep earlier attempts' events, which predate started_at.
+  const origin = started !== null && first !== null ? Math.min(started, first) : (started ?? first);
 
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const i = TABS.findIndex((t) => t.key === tab);
@@ -57,6 +61,7 @@ export function StageDetail({ stage, index, events, tab, onTab }: Props) {
           <h2 id="stage-title" className={s.title}>
             <span className={`${s.num} num`}>{index + 1}</span>
             {stage.name}
+            {stage.attempt > 1 && <span className={`${s.attempt} num`}>Attempt {stage.attempt}</span>}
           </h2>
         </div>
         <p className={s.desc}>{stage.agent_description}</p>
@@ -98,22 +103,41 @@ export function StageDetail({ stage, index, events, tab, onTab }: Props) {
 
       <div id={`tabpanel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className={s.body}>
         {tab === "activity" && (
-          <EventLog key={stage.key} events={stageEvents} origin={origin} stageKey={stage.key} live={stage.status === "running"} />
+          <>
+            {stage.feedback && (
+              <div className={s.feedback}>
+                <p className={s.feedbackHead}>
+                  Feedback for attempt {stage.attempt} from {handle(stage.feedback.by)}
+                  <time className="num" dateTime={stage.feedback.at} title={absolute(stage.feedback.at)}>
+                    {clock(stage.feedback.at)}
+                  </time>
+                </p>
+                <p className={s.feedbackText}>{stage.feedback.text}</p>
+              </div>
+            )}
+            <EventLog key={stage.key} events={stageEvents} origin={origin} stageKey={stage.key} live={stage.status === "running"} />
+          </>
         )}
         {tab === "artifacts" && (
-          <div className={s.pad}>
-            {stage.artifacts.length === 0 ? (
-              <p className={s.empty}>
-                {stage.status === "queued" || stage.status === "running"
-                  ? `${stage.name} has not produced artifacts yet.`
-                  : `${stage.name} produced no artifacts.`}
-              </p>
-            ) : (
-              stage.artifacts.map((a, i) => <ArtifactViewer key={`${a.kind}-${i}`} artifact={a} id={`artifact-${stage.key}-${i}`} />)
-            )}
+          <div className={s.scroll} tabIndex={0} aria-label={`${stage.name} artifacts`}>
+            <div className={s.pad}>
+              {stage.artifacts.length === 0 ? (
+                <p className={s.empty}>
+                  {stage.status === "queued" || stage.status === "running"
+                    ? `${stage.name} has not produced artifacts yet.`
+                    : `${stage.name} produced no artifacts.`}
+                </p>
+              ) : (
+                stage.artifacts.map((a, i) => <ArtifactViewer key={`${a.kind}-${i}`} artifact={a} id={`artifact-${stage.key}-${i}`} />)
+              )}
+            </div>
           </div>
         )}
-        {tab === "output" && <Output stage={stage} events={stageEvents} origin={origin} />}
+        {tab === "output" && (
+          <div className={s.scroll} tabIndex={0} aria-label={`${stage.name} output`}>
+            <Output stage={stage} events={stageEvents} origin={origin} />
+          </div>
+        )}
       </div>
     </section>
   );
@@ -142,14 +166,27 @@ function Output({ stage, events }: { stage: Stage; events: RunEvent[]; origin: n
         <div>
           <h3 className={s.h3}>Findings and results</h3>
           <ol className={s.outputs}>
-            {outputs.map((o) => (
-              <li key={o.seq}>
-                <time className="num" dateTime={o.ts} title={absolute(o.ts)}>
-                  {clock(o.ts)}
-                </time>
-                <span>{o.text}</span>
-              </li>
-            ))}
+            {outputs.map((o) => {
+              const r = structured(o.text);
+              return (
+                <li key={o.seq}>
+                  <time className="num" dateTime={o.ts} title={absolute(o.ts)}>
+                    {clock(o.ts)}
+                  </time>
+                  {r ? (
+                    <div className={s.result}>
+                      {r.summary && <p>{r.summary}</p>}
+                      <details className={s.json}>
+                        <summary>{r.parsed ? "Full result" : "Raw result"}</summary>
+                        <pre>{r.body}</pre>
+                      </details>
+                    </div>
+                  ) : (
+                    <span>{o.text}</span>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </div>
       )}

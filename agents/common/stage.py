@@ -92,7 +92,8 @@ async def guarded(
     except Exception as err:
         logger.exception("Stage failed")
         message = f"{err.__class__.__name__}: {err}"[:1000]
-        await emitter.safe_emit("error", "system", message)
+        if not emitter.last_error.startswith(message[:200]):
+            await emitter.safe_emit("error", "system", message)
         try:
             await set_stage(client, run, "failed", summary=message)
         except Exception:

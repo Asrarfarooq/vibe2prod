@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { EventKind, RunEvent } from "../api/types";
 import { logOffset } from "../lib/format";
+import { structured } from "../lib/structured";
 import { ChevronGlyph } from "./Icons";
 import s from "./EventLog.module.css";
 
@@ -148,12 +149,29 @@ export function EventLog({ events, origin, stageKey, live }: Props) {
   );
 }
 
+const LONG_TEXT = 280;
+const LEAD = /^\*\*(.+?)\*\*\s*/;
+
 function EventRow({ e, t0, open, onToggle }: { e: RunEvent; t0: number; open: boolean; onToggle: (seq: number) => void }) {
-  const payload = e.data ? (e.kind === "tool_call" ? (e.data.args ?? e.data) : e.kind === "tool_result" ? (e.data.result ?? e.data) : e.data) : null;
-  const inline = payload ? summarize(payload) : null;
-  const expandable = payload !== null && payload !== undefined;
   const isTool = e.kind === "tool_call" || e.kind === "tool_result";
+  const result = e.kind === "output" && !e.data ? structured(e.text) : null;
+  const payload: unknown = result
+    ? result.body
+    : e.data
+      ? e.kind === "tool_call"
+        ? (e.data.args ?? e.data)
+        : e.kind === "tool_result"
+          ? (e.data.result ?? e.data)
+          : e.data
+      : null;
+  const inline = payload && !result ? summarize(payload) : null;
+  const hasPayload = payload !== null && payload !== undefined;
+  const text = result ? (result.summary ?? "Structured result") : e.text;
+  const long = !isTool && !result && text.length > LONG_TEXT;
+  const expandable = hasPayload || long;
   const offset = logOffset(new Date(e.ts).getTime() - t0);
+  const lead = !isTool ? LEAD.exec(text) : null;
+  const prose = lead ? text.slice(lead[0].length) : text;
   const body = (
     <>
       <span className={`${s.ts} num`} title={new Date(e.ts).toISOString()}>
@@ -163,7 +181,14 @@ function EventRow({ e, t0, open, onToggle }: { e: RunEvent; t0: number; open: bo
         {KIND_TAG[e.kind]}
       </span>
       <span className={s.text}>
-        {isTool ? <span className={s.toolName}>{e.text}</span> : <span>{e.text}</span>}
+        {isTool ? (
+          <span className={s.toolName}>{e.text}</span>
+        ) : (
+          <span className={long && !open ? s.clamp : undefined}>
+            {lead && <span className={s.lead}>{lead[1]} </span>}
+            {prose}
+          </span>
+        )}
         {isTool && inline && <span className={s.inline}>{inline}</span>}
         {!isTool && e.author && !["codeguard", "architect", "iac", "deploy", "dashboard"].includes(e.author) && (
           <span className={s.author}>{e.author}</span>
@@ -176,6 +201,7 @@ function EventRow({ e, t0, open, onToggle }: { e: RunEvent; t0: number; open: bo
       )}
     </>
   );
+  const showPayload = open && hasPayload;
   return (
     <li className={s.row} data-kind={e.kind}>
       {expandable ? (
@@ -184,7 +210,7 @@ function EventRow({ e, t0, open, onToggle }: { e: RunEvent; t0: number; open: bo
           id={`event-${e.seq}-toggle`}
           className={s.line}
           aria-expanded={open}
-          aria-controls={`event-${e.seq}-payload`}
+          aria-controls={showPayload ? `event-${e.seq}-payload` : undefined}
           onClick={() => onToggle(e.seq)}
         >
           {body}
@@ -192,9 +218,9 @@ function EventRow({ e, t0, open, onToggle }: { e: RunEvent; t0: number; open: bo
       ) : (
         <div className={s.line}>{body}</div>
       )}
-      {expandable && open && (
-        <pre id={`event-${e.seq}-payload`} className={s.payload}>
-          {JSON.stringify(payload, null, 2)}
+      {showPayload && (
+        <pre id={`event-${e.seq}-payload`} className={s.payload} data-wrap={typeof payload === "string" || undefined}>
+          {typeof payload === "string" ? payload : JSON.stringify(payload, null, 2)}
         </pre>
       )}
     </li>

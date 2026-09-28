@@ -59,13 +59,16 @@ export function elapsedClock(ms: number): string {
   return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
-/** Log offset, e.g. "+03:10.2". */
+/** Log offset, e.g. "+03:10.2", or "+4:40:27" past one hour. */
 export function logOffset(ms: number): string {
   const safe = Math.max(0, ms);
-  const m = Math.floor(safe / 60000);
+  const h = Math.floor(safe / 3600000);
+  const m = Math.floor((safe % 3600000) / 60000);
   const s = Math.floor((safe % 60000) / 1000);
   const t = Math.floor((safe % 1000) / 100);
-  return `+${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${t}`;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `+${h}:${mm}:${ss}` : `+${mm}:${ss}.${t}`;
 }
 
 export function usd(n: number, digits = 2): string {

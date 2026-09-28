@@ -1,52 +1,53 @@
 .stepper {
+  --gate-w: clamp(96px, 8vw, 136px);
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: var(--space-2);
+  padding: var(--space-3);
 }
 
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
+  display: grid;
   align-items: stretch;
 }
 
+/* Nodes and gates become direct grid cells so every node and every gate gets an equal column. */
 .item {
-  display: flex;
-  align-items: stretch;
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.item[data-last] {
-  flex: 0.78 1 0;
+  display: contents;
 }
 
 .node {
-  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 6px;
   text-align: left;
-  padding: var(--space-3) var(--space-3);
-  background: transparent;
-  border: 1px solid transparent;
+  padding: var(--space-3);
+  background: var(--bg);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   transition:
     background-color var(--dur-hover) var(--ease),
-    border-color var(--dur-hover) var(--ease);
+    border-color var(--dur-hover) var(--ease),
+    box-shadow var(--dur-hover) var(--ease);
 }
 
 .node:hover {
-  background: var(--surface-2);
+  border-color: var(--border);
 }
 
 .node[aria-pressed="true"] {
-  background: var(--bg);
+  background: var(--surface-1);
   border-color: var(--border);
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+
+.node[data-status="awaiting_approval"] {
+  border-color: var(--warning);
 }
 
 .nodeTop {
@@ -68,6 +69,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.attempt {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .node[data-status="queued"] .name,
@@ -113,29 +122,26 @@
   margin-right: 6px;
 }
 
-/* Gate connector */
+/* Gate connector: line, chip and label all share the column's horizontal center. */
 .gate {
   position: relative;
-  flex: 0 0 clamp(84px, 9vw, 128px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 var(--space-1);
+  min-width: 0;
 }
 
 .line {
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(50% - 11px);
+  top: 50%;
   height: 0;
   border-top: 1px dashed var(--border);
 }
 
 .badge {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 1;
   width: 22px;
   height: 22px;
@@ -161,19 +167,18 @@
 }
 
 .gateLabel {
-  position: relative;
-  z-index: 1;
-  font-size: var(--fs-micro);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% + 15px);
+  padding: 0 var(--space-1);
+  text-align: center;
+  font-size: 11px;
+  line-height: 14px;
   color: var(--text-faint);
   white-space: nowrap;
-  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 16px;
-}
-
-.labelPart + .labelPart {
-  margin-left: 0.35em;
 }
 
 .gate[data-state="pending"] .lock {
@@ -240,9 +245,6 @@
 }
 
 @media (max-width: 1200px) {
-  .gate {
-    flex-basis: 72px;
-  }
   .name,
   .statusText {
     white-space: normal;
@@ -259,39 +261,14 @@
   .dur::before {
     content: none;
   }
-  .gateLabel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-  .labelPart {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .gate[data-state="waiting"] .gateLabel,
-  .gate[data-state="pending"] .gateLabel {
-    white-space: normal;
-    text-align: center;
-  }
 }
 
 @media (max-width: 860px) {
   .list {
-    flex-direction: column;
-  }
-  .item,
-  .item[data-last] {
-    flex-direction: column;
-    flex: none;
+    grid-template-columns: 1fr !important;
   }
   .gate {
-    flex: none;
-    flex-direction: row;
-    justify-content: flex-start;
-    height: 36px;
-    padding: 0 0 0 var(--space-3);
-    gap: var(--space-3);
+    height: 40px;
   }
   .line {
     left: calc(var(--space-3) + 11px);
@@ -302,6 +279,16 @@
     width: 0;
     border-top: 0 !important;
     border-left: 1px dashed var(--border);
+  }
+  .badge {
+    left: var(--space-3);
+    transform: translateY(-50%);
+  }
+  .gateLabel {
+    left: calc(var(--space-3) + 34px);
+    top: 50%;
+    transform: translateY(-50%);
+    text-align: left;
   }
   .gate[data-state="waiting"] .line {
     border-left: 1px solid var(--warning);

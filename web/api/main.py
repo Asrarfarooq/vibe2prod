@@ -105,6 +105,10 @@ def serialize_run(run_id: str, doc: dict) -> dict:
                 if decision
                 else None,
                 "artifacts": stage.get("artifacts", []),
+                "attempt": stage.get("attempt", 1),
+                "feedback": {**feedback, "at": iso(feedback.get("at"))}
+                if (feedback := stage.get("feedback"))
+                else None,
             }
         )
     return {
@@ -489,6 +493,95 @@ async def decide(
         error = await asyncio.to_thread(start_stage_job, run_id, next_stage)
         if error:
             await append_event(run_id, next_stage, "error", "dashboard", error)
+    return await load_run(run_id)
+
+
+class Rerun(BaseModel):
+    feedback: str = Field(min_length=1, max_length=4000)
+
+
+RERUNNABLE = {"awaiting_approval", "approved", "denied", "failed"}
+
+
+@app.post("/api/runs/{run_id}/stages/{stage}/rerun")
+async def rerun(
+    run_id: str,
+    stage: str,
+    body: Rerun,
+    x_requested_with: str | None = Header(default=None),
+    x_approver_key: str | None = Header(default=None),
+):
+    user = require_approver(x_requested_with, x_approver_key)
+    if stage not in STAGE_KEYS:
+        raise HTTPException(status_code=400, detail="Unknown stage")
+    feedback = body.feedback.strip()
+    if not feedback:
+        raise HTTPException(status_code=400, detail="Feedback is required")
+
+    run_ref = db.collection("runs").document(run_id)
+    now = datetime.now(timezone.utc)
+    index = STAGE_KEYS.index(stage)
+
+    @firestore.async_transactional
+    async def apply(transaction) -> None:
+        snapshot = await run_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            raise HTTPException(status_code=404, detail="Run not found")
+        doc = snapshot.to_dict()
+        stages = doc.get("stages", {})
+        if doc.get("status") == "running":
+            raise HTTPException(
+                status_code=409,
+                detail="A stage is still running; wait for it to finish",
+            )
+        if stages.get(stage, {}).get("status") not in RERUNNABLE:
+            raise HTTPException(status_code=409, detail="This stage has not run yet")
+        record = {"text": feedback, "by": user, "at": now}
+        updates: dict[str, Any] = {
+            "status": "running",
+            "current_stage": stage,
+            "updated_at": now,
+            "score": None,
+            f"stages.{stage}": {
+                "status": "running",
+                "started_at": now,
+                "attempt": stages.get(stage, {}).get("attempt", 1) + 1,
+                "feedback": record,
+            },
+        }
+        for later in STAGE_KEYS[index + 1 :]:
+            if later in stages:
+                updates[f"stages.{later}"] = firestore.DELETE_FIELD
+        transaction.update(run_ref, updates)
+        transaction.set(
+            run_ref.collection("decisions").document(),
+            {
+                "stage": stage,
+                "decision": "rerun",
+                "by": user,
+                "at": now,
+                "reason": feedback,
+            },
+        )
+
+    await apply(db.transaction())
+    await append_event(
+        run_id, stage, "status", "dashboard", f"Rerun requested by {user}: {feedback}"
+    )
+    error = await asyncio.to_thread(start_stage_job, run_id, stage)
+    if error:
+        await run_ref.update(
+            {
+                "status": "failed",
+                "current_stage": None,
+                f"stages.{stage}.status": "failed",
+                f"stages.{stage}.ended_at": datetime.now(timezone.utc),
+                f"stages.{stage}.summary": error,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        )
+        await append_event(run_id, stage, "error", "dashboard", error)
+        raise HTTPException(status_code=502, detail=error)
     return await load_run(run_id)
 
 

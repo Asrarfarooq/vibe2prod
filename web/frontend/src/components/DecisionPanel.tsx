@@ -16,20 +16,24 @@ interface Props {
 }
 
 const MAX_REASON = 2000;
+const LONG_SUMMARY = 220;
+
+type Action = "approve" | "deny" | "changes";
 
 export function DecisionPanel({ runId, stage, index, onDecided, onConflict }: Props) {
   const [reason, setReason] = useState("");
+  const [more, setMore] = useState(false);
   const [keyInput, setKeyInput] = useState("");
-  const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
+  const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fieldError, setFieldError] = useState<"key" | "reason" | null>(null);
+  const [fieldError, setFieldError] = useState<"key" | "deny" | "changes" | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const keyField = useRef<HTMLInputElement>(null);
   const hintId = useId();
   const errId = useId();
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
-  const submit = async (decision: "approve" | "deny") => {
+  const submit = async (action: Action) => {
     if (busy) return;
     const key = approverKey.get() ?? keyInput.trim();
     const trimmed = reason.trim();
@@ -39,18 +43,19 @@ export function DecisionPanel({ runId, stage, index, onDecided, onConflict }: Pr
       keyField.current?.focus();
       return;
     }
-    if (decision === "deny" && !trimmed) {
-      setFieldError("reason");
+    if (action !== "approve" && !trimmed) {
+      setFieldError(action);
       setError(null);
       textarea.current?.focus();
       return;
     }
-    setBusy(decision);
+    setBusy(action);
     setError(null);
     setFieldError(null);
     try {
       const api = await getApi();
-      const run = await api.decide(runId, stage.key, decision, trimmed || null, key);
+      const run =
+        action === "changes" ? await api.rerun(runId, stage.key, trimmed, key) : await api.decide(runId, stage.key, action, trimmed || null, key);
       approverKey.remember(key);
       setKeyInput("");
       onDecided(run);
@@ -63,7 +68,7 @@ export function DecisionPanel({ runId, stage, index, onDecided, onConflict }: Pr
         setError(e.message);
         if (e.status === 409) onConflict();
       } else {
-        setError("The decision was not saved. Check your connection and try again.");
+        setError(action === "changes" ? "The request was not sent. Check your connection and try again." : "The decision was not saved. Check your connection and try again.");
       }
     } finally {
       setBusy(null);
@@ -149,7 +154,16 @@ export function DecisionPanel({ runId, stage, index, onDecided, onConflict }: Pr
           <strong>{stage.name}</strong> is waiting for approval.
         </p>
       </div>
-      {stage.summary && <p className={s.summary}>{stage.summary}</p>}
+      {stage.summary && (
+        <div>
+          <p className={`${s.summary} ${stage.summary.length > LONG_SUMMARY && !more ? s.clamp : ""}`}>{stage.summary}</p>
+          {stage.summary.length > LONG_SUMMARY && (
+            <button id="decision-summary-toggle" type="button" className={s.textBtn} aria-expanded={more} onClick={() => setMore((m) => !m)}>
+              {more ? "Show less" : "Show all"}
+            </button>
+          )}
+        </div>
+      )}
 
       <form className={s.form} onSubmit={onSubmit} onKeyDown={onKey} noValidate>
         <ApproverKeyField
@@ -163,12 +177,12 @@ export function DecisionPanel({ runId, stage, index, onDecided, onConflict }: Pr
           invalid={fieldError === "key"}
           errorId={errId}
           disabled={busy !== null}
-          hint="Only the Vibe2Prod team can approve or deny stages."
+          hint="Only the Vibe2Prod team can act on stages."
         />
         <div className={s.field}>
           <label htmlFor="decision-reason" className={s.fieldLabel}>
-            Reason
-            <span className={s.optional}>Required to deny</span>
+            Note
+            <span className={s.optional}>Required to deny or request changes</span>
           </label>
           <textarea
             ref={textarea}
@@ -179,29 +193,34 @@ export function DecisionPanel({ runId, stage, index, onDecided, onConflict }: Pr
             value={reason}
             onChange={(e) => {
               setReason(e.target.value);
-              if (fieldError === "reason" && e.target.value.trim()) setFieldError(null);
+              if ((fieldError === "deny" || fieldError === "changes") && e.target.value.trim()) setFieldError(null);
             }}
-            placeholder="What should change before this runs again?"
-            aria-invalid={fieldError === "reason" || undefined}
-            aria-describedby={`${hintId}${fieldError === "reason" || error ? ` ${errId}` : ""}`}
+            placeholder="What should change?"
+            aria-invalid={fieldError === "deny" || fieldError === "changes" || undefined}
+            aria-describedby={`${hintId}${fieldError || error ? ` ${errId}` : ""}`}
             disabled={busy !== null}
           />
           <p id={hintId} className={s.hint}>
-            Saved with the decision in the audit record.
+            Saved in the audit record. Request changes also sends it to the agent.
           </p>
         </div>
         {(fieldError || error) && (
           <p id={errId} className={s.error} role="alert">
             {fieldError === "key"
               ? "Enter your approver key."
-              : fieldError === "reason"
-                ? "Enter a reason to deny this stage."
-                : error}
+              : fieldError === "deny"
+                ? "Enter a note to deny this stage."
+                : fieldError === "changes"
+                  ? "Enter a note describing the changes."
+                  : error}
           </p>
         )}
         <div className={s.actions}>
           <button id="decision-approve" type="submit" className={s.primary} disabled={busy !== null}>
             {busy === "approve" ? "Approving" : "Approve and continue"}
+          </button>
+          <button id="decision-changes" type="button" className={s.secondary} disabled={busy !== null} onClick={() => void submit("changes")}>
+            {busy === "changes" ? "Sending" : "Request changes"}
           </button>
           <button id="decision-deny" type="button" className={s.danger} disabled={busy !== null} onClick={() => void submit("deny")}>
             {busy === "deny" ? "Denying" : "Deny"}

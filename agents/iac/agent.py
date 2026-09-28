@@ -294,7 +294,7 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
             "## App file tree",
             *files[:300],
         ]
-        brief_text = "\n".join(parts)
+        brief_text = context.feedback_block(run) + "\n".join(parts)
         await emitter.safe_emit(
             "tool_result",
             "iac",

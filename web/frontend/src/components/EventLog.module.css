@@ -53,7 +53,7 @@
 
 .scroller {
   flex: 1 1 0;
-  min-height: 360px;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--space-2) 0 var(--space-6);
@@ -156,6 +156,19 @@ button.line:focus-visible {
   font-weight: 500;
 }
 
+.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.lead {
+  font-weight: 500;
+  color: var(--text);
+}
+
 .inline {
   margin-left: var(--space-3);
   font-family: var(--font-code);
@@ -188,14 +201,20 @@ button.line:focus-visible {
 .payload {
   margin: 2px var(--space-5) var(--space-2) calc(var(--space-5) + 68px + 64px + var(--space-3) * 2);
   padding: var(--space-3) var(--space-4);
+  max-height: 420px;
   background: var(--code-bg);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   font-size: var(--fs-micro);
   line-height: 1.6;
   color: var(--text);
-  overflow-x: auto;
+  overflow: auto;
   white-space: pre;
+}
+
+.payload[data-wrap] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .empty,
@@ -236,10 +255,10 @@ button.line:focus-visible {
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1100px), (max-height: 699px) {
   .scroller {
     flex: none;
-    height: clamp(360px, calc(100vh - 420px), 760px);
+    height: clamp(360px, calc(100vh - 270px), 760px);
   }
 }
 

@@ -25,6 +25,7 @@ class RunContext:
     commit: str | None
     app_path: str
     workdir: Path
+    feedback: str = ""
 
     @property
     def branch(self) -> str:
@@ -54,7 +55,9 @@ async def load(client: firestore.AsyncClient) -> RunContext:
     snapshot = await client.collection("runs").document(run_id).get()
     if not snapshot.exists:
         raise RuntimeError(f"Run {run_id} not found")
-    app = snapshot.to_dict().get("app", {})
+    doc = snapshot.to_dict()
+    app = doc.get("app", {})
+    feedback = ((doc.get("stages") or {}).get(stage) or {}).get("feedback") or {}
     return RunContext(
         run_id=run_id,
         stage=stage,
@@ -64,4 +67,16 @@ async def load(client: firestore.AsyncClient) -> RunContext:
         commit=app.get("commit"),
         app_path=app.get("path", "."),
         workdir=WORKDIR / run_id,
+        feedback=feedback.get("text") or "",
+    )
+
+
+def feedback_block(run: RunContext) -> str:
+    """Prompt section with the human's feedback on this stage's previous attempt, or ''."""
+    if not run.feedback:
+        return ""
+    return (
+        "## Reviewer feedback on the previous attempt of this stage\n"
+        "A human sent this stage back with the note below. Address it first; keep everything else that was correct.\n"
+        f"{run.feedback}\n\n"
     )

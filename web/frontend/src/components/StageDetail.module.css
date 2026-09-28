@@ -3,12 +3,14 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .head {
-  padding: var(--space-5) var(--space-5) var(--space-4);
+  padding: var(--space-4) var(--space-5) var(--space-3);
 }
 
 .titleRow {
@@ -36,6 +38,39 @@
   margin-top: var(--space-1);
   color: var(--text-muted);
   max-width: 72ch;
+}
+
+.attempt {
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.feedback {
+  flex: none;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.feedbackHead {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
+.feedbackHead time {
+  color: var(--text-faint);
+}
+
+.feedbackText {
+  margin-top: 2px;
+  max-width: 96ch;
+  max-height: 4.8em;
+  overflow-y: auto;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .error {
@@ -136,6 +171,27 @@
   gap: var(--space-6);
 }
 
+.scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.scroll:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Same breakpoints as the run page: when the document scrolls, give panels a fixed viewport-based height. */
+@media (max-width: 1100px), (max-height: 699px) {
+  .scroll {
+    flex: none;
+    height: clamp(360px, calc(100vh - 220px), 760px);
+  }
+}
+
 .empty {
   color: var(--text-muted);
   padding: var(--space-4) 0;
@@ -162,7 +218,7 @@
 
 .outputs li {
   display: grid;
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 56px minmax(0, 1fr);
   gap: var(--space-3);
   padding: var(--space-2) 0;
   border-top: 1px solid var(--border-subtle);
@@ -172,4 +228,41 @@
   color: var(--text-faint);
   font-size: var(--fs-micro);
   line-height: 21px;
+}
+
+.outputs li > span,
+.result p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  max-width: 110ch;
+}
+
+.result {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.json summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+}
+
+.json summary:hover {
+  color: var(--text);
+}
+
+.json pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
+  max-height: 360px;
+  overflow: auto;
+  background: var(--code-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-micro);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

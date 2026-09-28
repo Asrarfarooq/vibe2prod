@@ -53,7 +53,7 @@ Keep Gemini model ids exactly as the app has them; never switch to an older mode
 Keep changes minimal and keep the app working. Do not add features. Leave infrastructure (databases, auth providers, secret storage) to later stages and list it under remaining.
 After editing, call rescan once and fix anything new you introduced. Then return the FixReport.
 
-Scanner findings ({finding_count} total):
+{feedback}Scanner findings ({finding_count} total):
 {findings}
 """
 
@@ -215,6 +215,7 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
                 "before": {k: len(v) for k, v in results.items()},
                 "finding_count": len(flat),
                 "findings": json.dumps(flat[:MAX_FINDINGS_IN_PROMPT], indent=1),
+                "feedback": context.feedback_block(run),
             }
         )
 

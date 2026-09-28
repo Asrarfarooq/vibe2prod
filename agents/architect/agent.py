@@ -266,7 +266,7 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
             "## Security agent summary",
             codeguard.get("summary") or "No summary recorded.",
         ]
-        app_context = "\n".join(parts)
+        app_context = context.feedback_block(run) + "\n".join(parts)
         await emitter.safe_emit(
             "tool_result",
             "architect",

@@ -98,6 +98,13 @@
   line-height: 1.35;
 }
 
+.linkUrl {
+  margin-top: 2px;
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 .open {
   flex: none;
   display: inline-flex;
@@ -138,12 +145,34 @@
   letter-spacing: -0.01em;
 }
 
-/* Markdown */
+/* Markdown: prose stays at reading width, tables and code blocks may use the full panel. */
 .doc {
-  max-width: 76ch;
   font-size: var(--fs-body);
   line-height: 1.65;
   color: var(--text);
+}
+
+.doc > :is(p, ul, ol, h1, h2, h3, h4, blockquote) {
+  max-width: 80ch;
+}
+
+.doc hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-6) 0;
+}
+
+.doc h4 {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+.doc blockquote {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border);
+  color: var(--text-muted);
 }
 
 .doc > :first-child {
@@ -195,12 +224,14 @@
 }
 
 .doc pre {
+  margin: 0 0 var(--space-4);
   background: var(--code-bg);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   overflow-x: auto;
   font-size: var(--fs-micro);
+  line-height: 1.6;
 }
 
 .doc pre code {
@@ -208,19 +239,28 @@
   padding: 0;
 }
 
+.tableWrap {
+  overflow-x: auto;
+  margin: var(--space-2) 0 var(--space-4);
+}
+
 .doc table {
   width: 100%;
   border-collapse: collapse;
-  margin: var(--space-2) 0 var(--space-4);
   font-size: var(--fs-log);
+  line-height: 1.5;
 }
 
 .doc th,
 .doc td {
   text-align: left;
-  padding: 6px var(--space-3) 6px 0;
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: top;
+}
+
+.doc td code {
+  overflow-wrap: anywhere;
 }
 
 .doc th {
@@ -231,19 +271,32 @@
 
 /* Terraform */
 .tf {
+  --tf-h: min(520px, 58vh);
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  overflow: hidden;
+}
+
+.tfSide {
+  max-height: var(--tf-h);
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--surface-1);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.tfDir {
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
 }
 
 .tfFiles {
   list-style: none;
   margin: 0;
   padding: var(--space-2);
-  border-right: 1px solid var(--border);
-  background: var(--surface-1);
 }
 
 .tfFile {
@@ -275,12 +328,13 @@
 
 .code {
   margin: 0;
+  max-height: var(--tf-h);
   padding: var(--space-3) 0;
   background: var(--code-bg);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
   font-size: var(--fs-micro);
   line-height: 1.7;
   overflow: auto;
-  max-height: 520px;
 }
 
 .codeLine {
@@ -321,8 +375,78 @@
 }
 
 .costTable td {
-  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
   border-bottom: 1px solid var(--border-subtle);
+  vertical-align: baseline;
+}
+
+.resource {
+  font-size: var(--fs-micro);
+  overflow-wrap: anywhere;
+}
+
+.skuId {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* Report checks */
+.checks {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.checks .h4 {
+  display: flex;
+  justify-content: space-between;
+}
+
+.checkTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-log);
+  line-height: 1.5;
+}
+
+.checkTable th {
+  text-align: left;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 0 var(--space-4) var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.checkTable td {
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: baseline;
+}
+
+.checkName {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-weight: 500;
+}
+
+.checkName svg {
+  flex: none;
+  transform: translateY(2px);
+}
+
+.pass {
+  color: var(--success);
+}
+
+.fail {
+  color: var(--danger);
+}
+
+.checkDetail {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 .costTable tfoot th {
@@ -361,15 +485,22 @@
 .assumptions {
   margin: 0;
   padding-left: 1.1em;
+  max-width: 100ch;
   color: var(--text-muted);
   font-size: var(--fs-log);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.assumptions li + li {
+  margin-top: var(--space-1);
 }
 
 @media (max-width: 720px) {
   .tf {
     grid-template-columns: 1fr;
   }
-  .tfFiles {
+  .tfSide {
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }

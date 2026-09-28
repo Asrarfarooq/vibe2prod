@@ -38,6 +38,8 @@ function stage(key: StageKey, patch: Partial<Stage>): Stage {
     summary: null,
     decision: null,
     artifacts: [],
+    attempt: 1,
+    feedback: null,
     ...patch,
   };
 }
@@ -166,7 +168,7 @@ const COST_ARTIFACT: Artifact = {
 function mainRun(): Run {
   return {
     id: "run_8f2c1a",
-    number: 3,
+    number: 4,
     project_id: PROJECT_ID,
     project: "vibe2prod-509620",
     app: {
@@ -409,6 +411,61 @@ const run2DeployEvents: Ev[] = [
   DP(1830, "status", "Stage finished"),
 ];
 
+const IC = ev("iac", "iac");
+
+function run3(): Run {
+  const b = Date.now() - 5 * 3600 * 1000;
+  const a = (s: number) => new Date(b + s * 1000).toISOString();
+  const dec = (s: number) => ({ decision: "approve" as const, by: ME, at: a(s), reason: null });
+  return {
+    id: "run_c4e7b2",
+    number: 3,
+    project_id: PROJECT_ID,
+    project: "vibe2prod-509620",
+    app: { repo: REPO, branch: "main", commit: "c4e7b21f0a9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b", url: REPO_URL },
+    status: "failed",
+    current_stage: null,
+    created_at: a(0),
+    updated_at: a(2140),
+    score: null,
+    stages: [
+      stage("codeguard", { status: "approved", started_at: a(2), ended_at: a(180), summary: "Fixed 6 issues, 2 critical.", decision: dec(230), artifacts: [PR_ARTIFACT] }),
+      stage("architect", { status: "approved", started_at: a(240), ended_at: a(560), summary: "Design doc: 6 sections, 2 open risks.", decision: dec(640), artifacts: [DOC_ARTIFACT] }),
+      stage("iac", {
+        status: "approved",
+        started_at: a(1180),
+        ended_at: a(1420),
+        summary: "12 resources, estimated $24.41 per month. Added the lifecycle rule and budget alert from feedback.",
+        decision: dec(1500),
+        artifacts: [TF_ARTIFACT, COST_ARTIFACT],
+        attempt: 2,
+        feedback: { text: "Add a 30-day lifecycle rule on the images bucket and a $50 budget alert before we deploy.", by: ME, at: a(1175) },
+      }),
+      stage("deploy", {
+        status: "failed",
+        started_at: a(1510),
+        ended_at: a(2140),
+        summary: "terraform apply failed: google_firestore_database.receipts already exists in project vibe2prod-509620 (409).",
+      }),
+    ],
+  };
+}
+
+const run3Events: Ev[] = [
+  IC(1175, "status", `Rerun requested by ${ME}: Add a 30-day lifecycle rule on the images bucket and a $50 budget alert before we deploy.`, null, "dashboard"),
+  IC(1180, "status", "Stage started"),
+  IC(1184.2, "thought", "Feedback asks for a bucket lifecycle rule and a budget alert. Adding google_billing_budget and a lifecycle_rule on the images bucket."),
+  IC(1236.5, "tool_call", "write_file", { args: { path: "infra/data.tf", bytes: 1840 } }),
+  IC(1236.8, "tool_result", "write_file", { result: { ok: true } }),
+  IC(1310.1, "tool_call", "terraform", { args: { command: "terraform plan -out plan.out" } }),
+  IC(1388.7, "tool_result", "terraform", { result: { add: 12, change: 0, destroy: 0 } }),
+  IC(1420, "output", "12 resources, estimated $24.41 per month."),
+  DP(1510, "status", "Stage started"),
+  DP(1514.0, "tool_call", "terraform", { args: { command: "terraform apply plan.out" } }),
+  DP(2131.6, "tool_result", "terraform", { result: { added: 7, failed: 1 } }),
+  DP(2140, "error", "terraform apply failed: google_firestore_database.receipts already exists in project vibe2prod-509620 (409). Import it or rename the database."),
+];
+
 interface Store {
   run: Run;
   events: RunEvent[];
@@ -431,6 +488,7 @@ function init() {
   const cg2 = materialize(SCRIPT.slice(0, 19), b2);
   stores.set("run_71d0e4", { run: run2(), events: [...cg2, ...materialize(run2DeployEvents, b2, cg2.length + 1)], pending: [], listeners: new Set() });
   stores.set("run_5b3a90", { run: run1(), events: materialize(run1Events, Date.now() - 3 * 24 * 3600 * 1000), pending: [], listeners: new Set() });
+  stores.set("run_c4e7b2", { run: run3(), events: materialize(run3Events, Date.now() - 5 * 3600 * 1000), pending: [], listeners: new Set() });
   startTail();
 }
 
@@ -636,6 +694,34 @@ export const mockApi: Api = {
       s.run.status = "denied";
       s.run.current_stage = null;
     }
+    emitRun(s);
+    return clone(s.run);
+  },
+  async rerun(id, key, feedback, approverKey) {
+    await delay(400);
+    if (!approverKey || approverKey === "invalid") throw new ApiError(403, "Unknown approver key");
+    const text = feedback.trim();
+    if (!text) throw new ApiError(400, "Feedback is required");
+    const s = get(id);
+    const idx = s.run.stages.findIndex((x) => x.key === key);
+    const st = s.run.stages[idx];
+    if (!st) throw new ApiError(400, "Unknown stage");
+    if (s.run.status === "running") throw new ApiError(409, "A stage is still running; wait for it to finish");
+    if (!["awaiting_approval", "approved", "denied", "failed"].includes(st.status)) throw new ApiError(409, "This stage has not run yet");
+    const now = new Date().toISOString();
+    s.run.stages[idx] = stage(key, { status: "running", started_at: now, attempt: st.attempt + 1, feedback: { text, by: ME, at: now } });
+    for (let i = idx + 1; i < s.run.stages.length; i++) s.run.stages[i] = stage(s.run.stages[i].key, {});
+    s.run.status = "running";
+    s.run.current_stage = key;
+    s.run.score = null;
+    push(s, { stage: key, kind: "status", author: "dashboard", text: `Rerun requested by ${ME}: ${text}`, data: null, ts: now });
+    setTimeout(() => {
+      push(s, { stage: key, kind: "status", author: key, text: "Stage started", data: null, ts: new Date().toISOString() });
+      emitRun(s);
+    }, 600);
+    setTimeout(() => {
+      push(s, { stage: key, kind: "thought", author: key, text: `Reading the reviewer feedback first: ${text}`, data: null, ts: new Date().toISOString() });
+    }, 1600);
     emitRun(s);
     return clone(s.run);
   },

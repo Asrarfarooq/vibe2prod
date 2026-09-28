@@ -77,6 +77,25 @@ a.crumb:hover {
   color: var(--text);
 }
 
+.textBtn {
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-log);
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-hover) var(--ease),
+    color var(--dur-hover) var(--ease);
+}
+
+.textBtn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 .user {
   font-size: var(--fs-log);
   color: var(--text-muted);

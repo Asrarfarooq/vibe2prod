@@ -1,9 +1,17 @@
 .page {
-  max-width: 1440px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: var(--space-8) var(--space-6) var(--space-12);
-  display: grid;
+  padding: var(--space-6) var(--space-6) var(--space-6);
+  display: flex;
+  flex-direction: column;
   gap: var(--space-4);
+}
+
+/* Desktop: exactly one screen tall below the 48px top bar; the stage panel and rail scroll inside. */
+@media (min-width: 1101px) and (min-height: 700px) {
+  .page {
+    height: calc(100dvh - 48px);
+  }
 }
 
 .header {
@@ -138,13 +146,20 @@
 }
 
 .grid {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 344px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--space-4);
-  align-items: stretch;
 }
 
 .rail {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -232,17 +247,13 @@
   min-height: 520px;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1100px), (max-height: 699px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
   }
   .rail {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  }
-  .rail > * + * {
-    border-top: 0;
-    border-left: 1px solid var(--border-subtle);
+    overflow: visible;
   }
 }
 
@@ -260,13 +271,6 @@
   }
   .h1 {
     font-size: 22px;
-  }
-  .rail {
-    grid-template-columns: 1fr;
-  }
-  .rail > * + * {
-    border-left: 0;
-    border-top: 1px solid var(--border-subtle);
   }
   .skelStepper {
     grid-template-columns: 1fr;

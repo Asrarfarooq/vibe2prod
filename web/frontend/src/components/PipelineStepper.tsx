@@ -11,11 +11,12 @@ interface Props {
 }
 
 export function PipelineStepper({ stages, selected, onSelect, now }: Props) {
+  const columns = `repeat(${stages.length - 1}, minmax(0, 1fr) var(--gate-w)) minmax(0, 1fr)`;
   return (
     <nav className={s.stepper} aria-label="Pipeline stages">
-      <ol className={s.list}>
+      <ol className={s.list} style={{ gridTemplateColumns: columns }}>
         {stages.map((st, i) => (
-          <li key={st.key} className={s.item} data-last={i === stages.length - 1 || undefined}>
+          <li key={st.key} className={s.item}>
             <StageNode stage={st} index={i} selected={selected === st.key} onSelect={onSelect} now={now} />
             {i < stages.length - 1 && <GateConnector stage={st} next={stages[i + 1]} index={i} />}
           </li>
@@ -42,6 +43,7 @@ function StageNode({ stage, index, selected, onSelect, now }: { stage: Stage; in
       <span className={s.nodeTop}>
         <span className={`${s.index} num`}>{index + 1}</span>
         <span className={s.name}>{stage.name}</span>
+        {stage.attempt > 1 && <span className={`${s.attempt} num`}>Attempt {stage.attempt}</span>}
       </span>
       <span className={s.meta}>
         <StatusIcon status={stage.status} size={14} />
@@ -94,8 +96,7 @@ function GateConnector({ stage, next, index }: { stage: Stage; next: Stage; inde
         <CrossGlyph className={`${s.glyph} ${s.cross}`} width={12} height={12} />
       </span>
       <span className={`${s.gateLabel} num`} aria-hidden>
-        <span className={s.labelPart}>{label}</span>
-        {sub && <span className={s.labelPart}>{sub}</span>}
+        {sub ? `${label} ${sub}` : label}
       </span>
     </div>
   );

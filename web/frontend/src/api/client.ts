@@ -54,6 +54,12 @@ const httpApi: Api = {
       headers: writeHeaders(approverKey),
       body: JSON.stringify({ decision, reason }),
     }),
+  rerun: (id, stage, feedback, approverKey) =>
+    request<Run>(`/api/runs/${enc(id)}/stages/${enc(stage)}/rerun`, {
+      method: "POST",
+      headers: writeHeaders(approverKey),
+      body: JSON.stringify({ feedback }),
+    }),
   subscribe(id: string, h: StreamHandlers) {
     const es = new EventSource(`/api/runs/${enc(id)}/stream`);
     es.onopen = () => h.onConnection("open");

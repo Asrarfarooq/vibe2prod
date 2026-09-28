@@ -6,6 +6,7 @@ import { TopBar, type Crumb } from "../components/TopBar";
 import { PipelineStepper } from "../components/PipelineStepper";
 import { StageDetail, type Tab } from "../components/StageDetail";
 import { DecisionPanel } from "../components/DecisionPanel";
+import { RerunPanel } from "../components/RerunPanel";
 import { ArtifactList } from "../components/Artifacts";
 import { Readiness } from "../components/Readiness";
 import { ExternalGlyph, StatusIcon } from "../components/Icons";
@@ -143,6 +144,7 @@ export function RunPage({ projectId, id }: { projectId: string; id: string }) {
   const [owner, name] = run.app.repo.includes("/") ? run.app.repo.split("/", 2) : ["", run.app.repo];
   const repoUrl = run.app.url && /^https:\/\//.test(run.app.url) ? run.app.url : `https://github.com/${run.app.repo}`;
   const deploy = run.stages.find((x) => x.key === "deploy");
+  const failedIdx = run.status === "failed" ? run.stages.findIndex((x) => x.status === "failed") : -1;
 
   return (
     <>
@@ -201,14 +203,26 @@ export function RunPage({ projectId, id }: { projectId: string; id: string }) {
         <div className={s.grid}>
           <StageDetail stage={stage} index={stageIdx} events={events} tab={tab} onTab={setTab} />
           <aside className={s.rail} aria-label="Decision, artifacts and readiness">
-            <DecisionPanel
-              key={target.stage.key}
-              runId={run.id}
-              stage={target.stage}
-              index={target.index}
-              onDecided={replaceRun}
-              onConflict={refetch}
-            />
+            {failedIdx >= 0 && (
+              <RerunPanel
+                key={`${run.stages[failedIdx].key}-${run.stages[failedIdx].attempt}`}
+                runId={run.id}
+                stages={run.stages}
+                failedIndex={failedIdx}
+                onSent={replaceRun}
+                onConflict={refetch}
+              />
+            )}
+            {(failedIdx < 0 || target.stage.decision) && (
+              <DecisionPanel
+                key={target.stage.key}
+                runId={run.id}
+                stage={target.stage}
+                index={target.index}
+                onDecided={replaceRun}
+                onConflict={refetch}
+              />
+            )}
             <section className={s.railSection} aria-labelledby="artifacts-heading">
               <h2 id="artifacts-heading" className={s.railLabel}>
                 Artifacts
