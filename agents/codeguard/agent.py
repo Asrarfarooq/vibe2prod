@@ -49,6 +49,7 @@ The app is in the current folder. Scanner findings are below. Fix the real secur
 - Upgrade vulnerable dependencies in package.json to the version latest_version returns (never downgrade), adapt code to breaking changes, then call update_lockfile.
 - Harden the Dockerfile (pinned slim base image, non-root user, npm ci, no secrets copied).
 Scanners miss things: read every source file and also fix security problems they did not report.
+Keep Gemini model ids exactly as the app has them; never switch to an older model.
 Keep changes minimal and keep the app working. Do not add features. Leave infrastructure (databases, auth providers, secret storage) to later stages and list it under remaining.
 After editing, call rescan once and fix anything new you introduced. Then return the FixReport.
 
