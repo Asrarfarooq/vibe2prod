@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "Kq7xP2mVtR9wL4sZ8nB3cY6hJ1fD5gA0eU",
-});
 
 function App() {
   const [notes, setNotes] = useState([]);
@@ -12,25 +7,48 @@ function App() {
   const [summary, setSummary] = useState("");
 
   useEffect(() => {
-    fetch("/api/notes").then((r) => r.json()).then(setNotes);
+    fetch("/api/notes")
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to fetch notes");
+        return r.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) setNotes(data);
+      })
+      .catch(() => {});
   }, []);
 
   async function addNote() {
-    const res = await fetch("/api/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    setNotes([...notes, await res.json()]);
-    setText("");
+    if (!text.trim()) return;
+    try {
+      const res = await fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (res.ok) {
+        const newNote = await res.json();
+        setNotes((prev) => [...prev, newNote]);
+        setText("");
+      }
+    } catch {
+      // ignore network errors
+    }
   }
 
   async function summarize() {
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: "Summarize these notes:\n" + notes.map((n) => n.text).join("\n"),
-    });
-    setSummary(response.text);
+    try {
+      const res = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSummary(data.summary || "");
+      }
+    } catch {
+      // ignore network errors
+    }
   }
 
   return (
@@ -41,10 +59,10 @@ function App() {
       <button onClick={summarize}>Summarize</button>
       <ul>
         {notes.map((n) => (
-          <li key={n.id} dangerouslySetInnerHTML={{ __html: n.text }} />
+          <li key={n.id}>{n.text}</li>
         ))}
       </ul>
-      <div dangerouslySetInnerHTML={{ __html: summary }} />
+      <div>{summary}</div>
     </main>
   );
 }
