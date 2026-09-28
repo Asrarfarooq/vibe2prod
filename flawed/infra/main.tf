@@ -71,7 +71,7 @@ resource "google_cloud_run_v2_service" "service" {
 
     scaling {
       min_instance_count = 0
-      max_instance_count = 3
+      max_instance_count = 2
     }
 
     containers {
