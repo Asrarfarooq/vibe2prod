@@ -21,9 +21,89 @@ steps:
       - --functional-type=agent
       - --identity-type=agent-identity
       - --service-account=vibe2prod-agent-runtime@$PROJECT_ID.iam.gserviceaccount.com
-      - --set-env-vars=AGENT=hello,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
+      - --set-env-vars=AGENT=hello,GOOGLE_GENAI_USE_ENTERPRISE=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
       - --max-retries=0
       - --task-timeout=10m
+
+  - id: deploy-codeguard-agent
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - beta
+      - run
+      - jobs
+      - deploy
+      - codeguard-agent
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/agents:$COMMIT_SHA
+      - --region=us-central1
+      - --functional-type=agent
+      - --identity-type=agent-identity
+      - --service-account=vibe2prod-agent-runtime@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=AGENT=codeguard,STAGE=codeguard,GOOGLE_GENAI_USE_ENTERPRISE=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
+      - --cpu=2
+      - --memory=4Gi
+      - --max-retries=0
+      - --task-timeout=40m
+
+  - id: deploy-architect-agent
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - beta
+      - run
+      - jobs
+      - deploy
+      - architect-agent
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/agents:$COMMIT_SHA
+      - --region=us-central1
+      - --functional-type=agent
+      - --identity-type=agent-identity
+      - --service-account=vibe2prod-agent-runtime@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=AGENT=architect,STAGE=architect,GOOGLE_GENAI_USE_ENTERPRISE=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
+      - --cpu=2
+      - --memory=4Gi
+      - --max-retries=0
+      - --task-timeout=40m
+
+  - id: deploy-iac-agent
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - beta
+      - run
+      - jobs
+      - deploy
+      - iac-agent
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/agents:$COMMIT_SHA
+      - --region=us-central1
+      - --functional-type=agent
+      - --identity-type=agent-identity
+      - --service-account=vibe2prod-agent-runtime@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=AGENT=iac,STAGE=iac,GOOGLE_GENAI_USE_ENTERPRISE=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
+      - --cpu=2
+      - --memory=4Gi
+      - --max-retries=0
+      - --task-timeout=40m
+
+  - id: deploy-deploy-agent
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - beta
+      - run
+      - jobs
+      - deploy
+      - deploy-agent
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/vibe2prod/agents:$COMMIT_SHA
+      - --region=us-central1
+      - --functional-type=agent
+      - --identity-type=agent-identity
+      - --service-account=vibe2prod-agent-runtime@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=AGENT=deploy,STAGE=deploy,GOOGLE_GENAI_USE_ENTERPRISE=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
+      - --cpu=2
+      - --memory=4Gi
+      - --max-retries=0
+      - --task-timeout=40m
 
 options:
   logging: CLOUD_LOGGING_ONLY

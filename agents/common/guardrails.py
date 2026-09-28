@@ -46,3 +46,11 @@ class GuardrailPlugin(BasePlugin):
             except PathNotAllowed as err:
                 return await self._block(tool.name, str(err))
         return None
+
+    async def on_tool_error_callback(self, *, tool, tool_args, tool_context, error):
+        # An uncaught tool exception aborts the whole workflow; the model can recover from most of them.
+        message = f"{error.__class__.__name__}: {error}"[:500]
+        await self._emitter.safe_emit(
+            "error", "guardrails", f"{tool.name} failed: {message}"
+        )
+        return {"status": "error", "error": message}

@@ -2,7 +2,14 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from google.auth.transport import mtls
 from google.cloud import firestore
+from google.cloud.firestore_v1.services.firestore.async_client import (
+    FirestoreAsyncClient,
+)
+from google.cloud.firestore_v1.services.firestore.transports.grpc_asyncio import (
+    FirestoreGrpcAsyncIOTransport,
+)
 
 PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "vibe2prod-509620")
 WORKDIR = Path(os.environ.get("WORKDIR", "/tmp/work"))
@@ -29,7 +36,17 @@ class RunContext:
 
 
 def db() -> firestore.AsyncClient:
-    return firestore.AsyncClient(project=PROJECT)
+    client = firestore.AsyncClient(project=PROJECT)
+    if mtls.should_use_client_cert() and mtls.has_default_client_cert_source():
+        # The Firestore wrapper always opens a plain TLS channel, which rejects Agent Identity's cert-bound tokens.
+        transport = FirestoreGrpcAsyncIOTransport(
+            host="firestore.mtls.googleapis.com",
+            credentials=client._credentials,
+            client_cert_source_for_mtls=mtls.default_client_cert_source(),
+        )
+        client._transport = transport
+        client._firestore_api_internal = FirestoreAsyncClient(transport=transport)
+    return client
 
 
 async def load(client: firestore.AsyncClient) -> RunContext:

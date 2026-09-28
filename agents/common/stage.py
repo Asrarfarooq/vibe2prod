@@ -25,6 +25,7 @@ async def set_stage(
     status: str,
     summary: str | None = None,
     artifacts: list[dict] | None = None,
+    result: dict | None = None,
 ) -> None:
     """Records the stage outcome on the run doc. awaiting_approval hands control to the dashboard."""
     now = datetime.now(timezone.utc)
@@ -40,6 +41,8 @@ async def set_stage(
         updates[f"stages.{run.stage}.summary"] = summary
     if artifacts is not None:
         updates[f"stages.{run.stage}.artifacts"] = artifacts
+    if result is not None:
+        updates[f"stages.{run.stage}.result"] = result
     await client.collection("runs").document(run.run_id).update(updates)
 
 

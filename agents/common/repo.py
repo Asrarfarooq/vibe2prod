@@ -11,7 +11,7 @@ from .context import RunContext
 
 GITHUB_API = "https://api.github.com"
 TOKEN_SECRET = os.environ.get("GITHUB_TOKEN_SECRET", "github-agent-token")
-BOT_NAME = "Vibe2Prod CodeGuard"
+BOT_NAME = "Vibe2Prod"
 BOT_EMAIL = "vibe2prod-bot@users.noreply.github.com"
 
 
@@ -74,14 +74,28 @@ class Repo:
             cwd=self.run.workdir.parent,
             auth=True,
         )
-        if self.run.commit:
-            self._git("checkout", self.run.commit)
-        self._git("checkout", "-b", self.run.branch)
+        # Later stages continue on the branch an earlier stage pushed, so one PR collects every stage.
+        remote = self._git("ls-remote", "--heads", "origin", self.run.branch, auth=True)
+        if remote:
+            self._git("fetch", "origin", self.run.branch, auth=True)
+            self._git("checkout", "-b", self.run.branch, "FETCH_HEAD")
+        else:
+            if self.run.commit:
+                self._git("checkout", self.run.commit)
+            self._git("checkout", "-b", self.run.branch)
         return self._git("rev-parse", "HEAD")
 
     def changed_files(self) -> list[str]:
-        out = self._git("status", "--porcelain", "--", self.run.app_path)
-        return [line[3:] for line in out.splitlines() if line]
+        out = self._git(
+            "ls-files",
+            "-z",
+            "--modified",
+            "--others",
+            "--exclude-standard",
+            "--",
+            self.run.app_path,
+        )
+        return sorted(set(filter(None, out.split("\0"))))
 
     def commit_and_push(self, message: str) -> None:
         self._git("add", "--all", "--", self.run.app_path)
@@ -96,15 +110,34 @@ class Repo:
         )
         self._git("push", "origin", f"HEAD:refs/heads/{self.run.branch}", auth=True)
 
-    def open_pr(self, title: str, body: str) -> dict:
-        headers = {
+    def _headers(self) -> dict:
+        return {
             "Authorization": f"Bearer {self._token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+
+    def _pr_info(self, number: int) -> dict:
+        resp = requests.get(
+            f"{GITHUB_API}/repos/{self.run.repo}/pulls/{number}",
+            headers=self._headers(),
+            timeout=30,
+        )
+        resp.raise_for_status()
+        pr = resp.json()
+        return {
+            "number": number,
+            "url": pr["html_url"],
+            "additions": pr.get("additions", 0),
+            "deletions": pr.get("deletions", 0),
+            "changed_files": pr.get("changed_files", 0),
+            "state": pr.get("state", "open"),
+        }
+
+    def open_pr(self, title: str, body: str) -> dict:
         resp = requests.post(
             f"{GITHUB_API}/repos/{self.run.repo}/pulls",
-            headers=headers,
+            headers=self._headers(),
             json={
                 "title": title,
                 "body": body,
@@ -114,17 +147,17 @@ class Repo:
             timeout=30,
         )
         resp.raise_for_status()
-        number = resp.json()["number"]
-        pr = requests.get(
-            f"{GITHUB_API}/repos/{self.run.repo}/pulls/{number}",
-            headers=headers,
+        return self._pr_info(resp.json()["number"])
+
+    def find_pr(self) -> dict | None:
+        """Returns the open PR for the run branch, or None."""
+        owner = self.run.repo.split("/")[0]
+        resp = requests.get(
+            f"{GITHUB_API}/repos/{self.run.repo}/pulls",
+            headers=self._headers(),
+            params={"head": f"{owner}:{self.run.branch}", "state": "open"},
             timeout=30,
-        ).json()
-        return {
-            "number": number,
-            "url": pr["html_url"],
-            "additions": pr.get("additions", 0),
-            "deletions": pr.get("deletions", 0),
-            "changed_files": pr.get("changed_files", 0),
-            "state": pr.get("state", "open"),
-        }
+        )
+        resp.raise_for_status()
+        pulls = resp.json()
+        return self._pr_info(pulls[0]["number"]) if pulls else None

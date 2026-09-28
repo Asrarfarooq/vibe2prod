@@ -76,6 +76,7 @@ def semgrep(root: Path) -> list[dict]:
             r["extra"].get("message", ""),
         )
         for r in data.get("results", [])
+        if r["extra"].get("severity") != "INFO"
     ]
 
 
