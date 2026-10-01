@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import subprocess
@@ -16,6 +17,8 @@ from . import scanners
 
 MAX_FILE_BYTES = 200_000
 MAX_FINDINGS_IN_PROMPT = 80
+# Time kept back from the stage timeout to rescan, commit, push and update the PR.
+WRAP_UP_S = 300
 SEVERITY_ORDER = {"CRITICAL": 0, "ERROR": 1, "HIGH": 1, "WARNING": 2, "MEDIUM": 2}
 
 
@@ -51,14 +54,17 @@ The app is in the current folder. Scanner findings are below. Fix the real secur
 Scanners miss things: read every source file and also fix security problems they did not report.
 Keep Gemini model ids exactly as the app has them; never switch to an older model.
 Keep changes minimal and keep the app working. Do not add features. Leave infrastructure (databases, auth providers, secret storage) to later stages and list it under remaining.
-After editing, call rescan once and fix anything new you introduced. Then return the FixReport.
+Some findings are not real problems: test fixtures, example or seed data, documentation, deliberately vulnerable code (for example security training challenges), or scanner false positives. Do not edit those. Add each group to remaining with the files and the reason it is safe or intentional, so the reviewer can see why it was left.
+You have about {budget_min} minutes. Fix secrets and critical or high findings first. rescan is slow on large apps, so fix findings in batches: make all the edits for a group of related findings, or several files, before calling rescan. Call rescan at most once per batch and once at the end, fix anything new you introduced, then return the FixReport.
 
 {feedback}Scanner findings ({finding_count} total):
 {findings}
 """
 
 
-def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
+def build(
+    run: context.RunContext, client, emitter: Emitter, repo: Repo, fix_budget_s: float
+):
     root = run.app_dir
 
     def list_files(path: str = ".") -> dict:
@@ -216,6 +222,7 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
                 "finding_count": len(flat),
                 "findings": json.dumps(flat[:MAX_FINDINGS_IN_PROMPT], indent=1),
                 "feedback": context.feedback_block(run),
+                "budget_min": max(1, round(fix_budget_s / 60)),
             }
         )
 
@@ -229,7 +236,22 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
         output_key="fix_report",
     )
 
-    async def verify():
+    async def wrap_up(state: dict) -> None:
+        """Verifies, pushes and records the result, also after the fixing budget ran out."""
+        report = state.get("fix_report")
+        if not report:
+            report = {
+                "summary": "CodeGuard reached its time limit before it finished fixing. "
+                "The changes made so far are in the pull request; rerun CodeGuard to continue.",
+                "fixed": [],
+                "remaining": [
+                    {
+                        "title": "Fixing stopped at the time limit",
+                        "reason": "Findings the scanners still report were not reviewed yet.",
+                    }
+                ],
+            }
+        before = state["before"]
         results = scanners.scan_all(root)
         after = {k: len(v) for k, v in results.items()}
         await emitter.safe_emit(
@@ -238,30 +260,36 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
             f"Findings after fixes: {sum(after.values())}",
             {"after": after},
         )
-        return Event(state={"after": after})
-
-    async def open_pr(fix_report: dict, before: dict, after: dict):
-        changed = repo.changed_files()
-        if not changed:
+        pr = None
+        title = (
+            f"CodeGuard: {len(report['fixed'])} security fixes"
+            if report["fixed"]
+            else "CodeGuard: partial security fixes"
+        )
+        if repo.changed_files():
+            repo.commit_and_push(f"CodeGuard: security fixes for run {run.run_id}")
+            body = _pr_body(report, before, after)
+            existing = repo.find_pr()
+            pr = (
+                repo.update_pr(existing["number"], title, body)
+                if existing
+                else repo.open_pr(title, body)
+            )
+            verb = "Updated" if existing else "Opened"
+            await emitter.safe_emit(
+                "output", "codeguard", f"{verb} PR #{pr['number']}", {"url": pr["url"]}
+            )
+        else:
+            pr = repo.find_pr()
             await emitter.safe_emit(
                 "output", "codeguard", "No code changes were needed"
             )
-            return Event(state={"pr": None})
-        body = _pr_body(fix_report, before, after)
-        repo.commit_and_push(f"CodeGuard: security fixes for run {run.run_id}")
-        pr = repo.open_pr(f"CodeGuard: {len(fix_report['fixed'])} security fixes", body)
-        await emitter.safe_emit(
-            "output", "codeguard", f"Opened PR #{pr['number']}", {"url": pr["url"]}
-        )
-        return Event(state={"pr": pr})
-
-    async def finish(fix_report: dict, pr: dict | None, before: dict, after: dict):
         artifacts = []
         if pr:
             artifacts.append(
                 {
                     "kind": "pr",
-                    "title": f"CodeGuard: {len(fix_report['fixed'])} security fixes",
+                    "title": title,
                     "url": pr["url"],
                     "meta": {
                         k: pr[k]
@@ -276,8 +304,8 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
                 }
             )
         summary = (
-            f"{fix_report['summary']} Findings {sum(before.values())} -> {sum(after.values())}; "
-            f"{len(fix_report['remaining'])} left for later stages."
+            f"{report['summary']} Findings {sum(before.values())} -> {sum(after.values())}; "
+            f"{len(report['remaining'])} left for later stages."
         )
         await set_stage(
             client,
@@ -288,17 +316,19 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
             result={
                 "before": before,
                 "after": after,
-                "fixed": fix_report["fixed"],
-                "remaining": fix_report["remaining"],
+                "fixed": report["fixed"],
+                "remaining": report["remaining"],
                 "pr_number": pr["number"] if pr else None,
+                "timed_out": bool(state.get("timed_out")),
             },
         )
         await emitter.safe_emit("status", "codeguard", "Waiting for approval")
 
-    return Workflow(
-        name="codeguard",
-        edges=[("START", checkout, scan, fixer, verify, open_pr, finish)],
-    ), {t.__name__ for t in tools}
+    return (
+        Workflow(name="codeguard", edges=[("START", checkout, scan, fixer)]),
+        {t.__name__ for t in tools},
+        wrap_up,
+    )
 
 
 def _pr_body(report: dict, before: dict, after: dict) -> str:
@@ -332,19 +362,31 @@ async def main() -> int:
 
     async def body():
         repo = Repo(run, github_token(run.project))
-        workflow, tool_names = build(run, client, emitter, repo)
+        fix_budget_s = env_int("STAGE_TIMEOUT_S", 1800) - WRAP_UP_S
+        workflow, tool_names, wrap_up = build(run, client, emitter, repo, fix_budget_s)
         plugins = [
             GuardrailPlugin(tool_names, run.app_dir, emitter),
             FirestoreEventsPlugin(emitter),
         ]
-        await run_workflow(
+        state = await run_workflow(
             workflow,
             run,
             plugins,
             prompt="Harden the app.",
             state={},
             max_llm_calls=env_int("MAX_LLM_CALLS", 500),
-            timeout_s=env_int("STAGE_TIMEOUT_S", 1800),
+            timeout_s=fix_budget_s,
+            partial_on_timeout=True,
         )
+        if "before" not in state:
+            raise TimeoutError("Time limit reached before the first scan finished")
+        if state["timed_out"]:
+            await emitter.safe_emit(
+                "status",
+                "codeguard",
+                f"Fixing budget of {round(fix_budget_s / 60)} min reached; saving the work done so far",
+            )
+        async with asyncio.timeout(WRAP_UP_S):
+            await wrap_up(state)
 
     return await guarded(client, run, emitter, body)

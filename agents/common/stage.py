@@ -54,10 +54,15 @@ async def run_workflow(
     state: dict,
     max_llm_calls: int,
     timeout_s: float,
+    partial_on_timeout: bool = False,
 ) -> dict:
-    """Runs one stage headless and returns the final session state."""
+    """Runs one stage headless and returns the final session state.
+
+    With partial_on_timeout, hitting timeout_s returns the state so far with timed_out=True.
+    """
     app = App(name=f"vibe2prod_{run.stage}", root_agent=root, plugins=plugins)
     sessions = InMemorySessionService()
+    timed_out = False
     async with Runner(app=app, session_service=sessions) as runner:
         session = await sessions.create_session(
             app_name=app.name, user_id=USER_ID, session_id=run.run_id, state=state
@@ -67,18 +72,23 @@ async def run_workflow(
             max_llm_calls=max_llm_calls,
             labels={"run_id": run.run_id.lower()[:63], "stage": run.stage},
         )
-        async with asyncio.timeout(timeout_s):
-            async for _ in runner.run_async(
-                user_id=USER_ID,
-                session_id=session.id,
-                new_message=message,
-                run_config=config,
-            ):
-                pass
+        try:
+            async with asyncio.timeout(timeout_s):
+                async for _ in runner.run_async(
+                    user_id=USER_ID,
+                    session_id=session.id,
+                    new_message=message,
+                    run_config=config,
+                ):
+                    pass
+        except TimeoutError:
+            if not partial_on_timeout:
+                raise
+            timed_out = True
         final = await sessions.get_session(
             app_name=app.name, user_id=USER_ID, session_id=session.id
         )
-    return dict(final.state)
+    return {**final.state, "timed_out": timed_out}
 
 
 async def guarded(

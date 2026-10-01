@@ -149,6 +149,16 @@ class Repo:
         resp.raise_for_status()
         return self._pr_info(resp.json()["number"])
 
+    def update_pr(self, number: int, title: str, body: str) -> dict:
+        resp = requests.patch(
+            f"{GITHUB_API}/repos/{self.run.repo}/pulls/{number}",
+            headers=self._headers(),
+            json={"title": title, "body": body},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return self._pr_info(number)
+
     def find_pr(self) -> dict | None:
         """Returns the open PR for the run branch, or None."""
         owner = self.run.repo.split("/")[0]
