@@ -34,7 +34,10 @@ NAME_FIELDS = {
     "google_secret_manager_secret": "secret_id",
     "google_storage_bucket": "name",
     "google_firestore_database": "name",
+    "google_logging_metric": "name",
+    "google_monitoring_alert_policy": "display_name",
 }
+REQUIRED_TYPES = ("google_logging_metric", "google_monitoring_alert_policy")
 PUBLIC_MEMBERS = ("allUsers", "allAuthenticatedUsers")
 RESERVED_ENV = {"PORT", "K_SERVICE", "K_REVISION", "K_CONFIGURATION"}
 MAX_ERRORS = 20
@@ -291,6 +294,12 @@ def policy(plan: dict, run_id: str) -> list[str]:
         errors.append(
             f"Expected exactly one google_cloud_run_v2_service, found {len(services)}."
         )
+    types = {res.get("type") for res in root.get("resources", [])}
+    for rtype in REQUIRED_TYPES:
+        if rtype not in types:
+            errors.append(
+                f"Missing {rtype}: every stack needs the error log metric and the 5xx alert policy."
+            )
 
     for rc in plan.get("resource_changes", []):
         addr, rtype = rc["address"], rc["type"]

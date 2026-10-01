@@ -363,7 +363,7 @@ async def main() -> int:
             plugins,
             prompt="Deploy and audit the app.",
             state={},
-            max_llm_calls=env_int("MAX_LLM_CALLS", 10),
+            max_llm_calls=env_int("MAX_LLM_CALLS", 500),
             timeout_s=env_int("STAGE_TIMEOUT_S", 3600),
         )
 

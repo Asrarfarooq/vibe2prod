@@ -32,6 +32,8 @@ FREE_TYPES = {
     "random_password",
     "random_id",
     "random_string",
+    "google_logging_metric",
+    "google_monitoring_alert_policy",
 }
 DEFAULT_SECRET_ACCESSES = 1500
 PRICING_SA = os.environ.get(
@@ -379,6 +381,7 @@ def estimate(
     est.assumptions += [
         "Container image storage is in the shared Artifact Registry repository and is not included.",
         "Cloud Logging and Monitoring stay within the free allotments at this volume (50 GiB logs per project per month).",
+        "Alerting policies are not billed until 2027-09-01, then $0.35 per metric reference per month (cloud.google.com/stackdriver/pricing).",
         (
             "Public list prices in USD from the Cloud Billing Catalog API; taxes, support and discounts are not included. "
             "Verify any SKU at https://cloud.google.com/skus/?filter=<SKU_ID>."

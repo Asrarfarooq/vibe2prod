@@ -109,6 +109,7 @@ export interface RunSummary {
   app: Omit<AppRef, "url">;
   status: RunStatus;
   current_stage: StageKey | null;
+  failed_stage: StageKey | null;
   created_at: string;
   score_total: number | null;
 }

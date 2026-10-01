@@ -343,7 +343,7 @@ async def main() -> int:
             plugins,
             prompt="Harden the app.",
             state={},
-            max_llm_calls=env_int("MAX_LLM_CALLS", 150),
+            max_llm_calls=env_int("MAX_LLM_CALLS", 500),
             timeout_s=env_int("STAGE_TIMEOUT_S", 1800),
         )
 

@@ -590,6 +590,7 @@ function summarize(r: Run): RunSummary {
     app: { repo: r.app.repo, branch: r.app.branch, commit: r.app.commit },
     status: r.status,
     current_stage: r.current_stage,
+    failed_stage: r.stages.find((st) => st.status === "failed")?.key ?? null,
     created_at: r.created_at,
     score_total: r.score?.total ?? null,
   };

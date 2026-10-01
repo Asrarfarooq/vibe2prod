@@ -74,6 +74,15 @@ export function RunsTable({ runs, now }: { runs: RunSummary[] | null; now: numbe
                         </>
                       ) : r.status === "succeeded" ? (
                         "Complete"
+                      ) : r.status === "failed" ? (
+                        r.failed_stage ? (
+                          <>
+                            Failed at <span className={`${s.stageNum} num`}>{STAGE_NUM[r.failed_stage]}</span>
+                            {STAGE_NAME[r.failed_stage]}
+                          </>
+                        ) : (
+                          "Failed"
+                        )
                       ) : (
                         "Stopped"
                       )}

@@ -46,7 +46,8 @@ INSTRUCTION = """You are the Terraform engineer of Vibe2Prod. Turn the approved 
 Files: write infra/main.tf, infra/variables.tf and infra/outputs.tf (add more infra/*.tf files only if it helps readability). infra/versions.tf is written by the platform (backend, provider pins, provider project/region, default labels, and the locals local.project, local.region, local.name, local.runtime_sa, local.run_label); read it, use its locals, never redefine them, and do not add terraform, backend or provider blocks.
 
 Rules:
-- Create every resource in the design doc's resources list and every IAM binding in its iam list, using the google provider 8.x resource types it names. Nothing else.
+- Create every resource in the design doc's resources list and every IAM binding in its iam list, using the google provider 8.x resource types it names. Nothing else, except the two observability resources below.
+- Observability (always, even if the design doc omits them): (1) google_logging_metric with name "${local.name}-errors", filter resource.type="cloud_run_revision" AND resource.labels.service_name=<the Cloud Run service name> AND severity>=ERROR, metric_descriptor metric_kind DELTA, value_type INT64. (2) google_monitoring_alert_policy with display_name "${local.name} 5xx responses", combiner OR, no notification_channels, one condition_threshold whose filter is resource.type = "cloud_run_revision" AND resource.labels.service_name = <the service name> AND metric.type = "run.googleapis.com/request_count" AND metric.labels.response_code_class = "5xx", comparison COMPARISON_GT, threshold_value 5, duration "0s", aggregations alignment_period "300s", per_series_aligner ALIGN_SUM, cross_series_reducer REDUCE_SUM. Reference the service name from the Cloud Run resource, not a literal.
 - Names: Cloud Run service, Firestore database id and secret ids start with local.name. The bucket name is local.name followed by a hyphen and local.project, because bucket names are global.
 - Labels come from the provider default_labels; do not repeat them.
 - variable "image" (string, no default): the container image URL, set by the deploy stage. The Cloud Run container image must be var.image.
@@ -539,7 +540,7 @@ async def main() -> int:
             plugins,
             prompt="Write the Terraform and estimate the cost.",
             state={},
-            max_llm_calls=env_int("MAX_LLM_CALLS", 80),
+            max_llm_calls=env_int("MAX_LLM_CALLS", 500),
             timeout_s=env_int("STAGE_TIMEOUT_S", 1800),
         )
 

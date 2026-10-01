@@ -93,6 +93,29 @@ def test_safe_plan_passes():
     assert gate.violations(safe_plan(), RUN, PROJECT) == []
 
 
+def test_observability_resources():
+    metric = rc(
+        "google_logging_metric.errors",
+        "google_logging_metric",
+        ["create"],
+        {"name": f"app-{RUN}-errors", "project": PROJECT},
+    )
+    alert = rc(
+        "google_monitoring_alert_policy.errors",
+        "google_monitoring_alert_policy",
+        ["create"],
+        {"display_name": f"app-{RUN} 5xx responses", "project": PROJECT},
+        {"name": True},
+    )
+    plan = safe_plan()
+    plan["resource_changes"] += [metric, alert]
+    assert gate.violations(plan, RUN, PROJECT) == []
+    metric["change"]["after"]["name"] = "errors"
+    assert gate.violations(plan, RUN, PROJECT) == [
+        f"google_logging_metric.errors: name='errors' lacks the app-{RUN} prefix"
+    ]
+
+
 @pytest.mark.parametrize(
     "actions",
     [["delete"], ["delete", "create"], ["create", "delete"], ["forget"]],

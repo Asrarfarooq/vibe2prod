@@ -127,6 +127,7 @@ def serialize_run(run_id: str, doc: dict) -> dict:
 
 
 def summarize_run(run_id: str, doc: dict) -> dict:
+    stages = doc.get("stages") or {}
     return {
         "id": run_id,
         "number": doc.get("number"),
@@ -134,6 +135,10 @@ def summarize_run(run_id: str, doc: dict) -> dict:
         "app": doc.get("app", {}),
         "status": doc.get("status", "running"),
         "current_stage": doc.get("current_stage"),
+        "failed_stage": next(
+            (k for k in STAGE_KEYS if (stages.get(k) or {}).get("status") == "failed"),
+            None,
+        ),
         "created_at": iso(doc.get("created_at")),
         "score_total": (doc.get("score") or {}).get("total"),
     }

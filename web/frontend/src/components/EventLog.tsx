@@ -119,7 +119,7 @@ export function EventLog({ events, origin, stageKey, live }: Props) {
           <p className={s.empty}>
             {events.length === 0
               ? live
-                ? "Waiting for the agent's first event."
+                ? "Starting container. The first event usually arrives within 3 to 4 minutes."
                 : "No activity recorded for this stage."
               : "No events match this filter."}
           </p>
