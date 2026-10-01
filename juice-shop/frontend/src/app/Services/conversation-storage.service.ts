@@ -14,7 +14,9 @@ const STORAGE_KEY = 'juiceshop_chat_conversations'
 export class ConversationStorageService {
   generateId (): string {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-    const random8 = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+    const array = new Uint8Array(8)
+    crypto.getRandomValues(array)
+    const random8 = Array.from(array, byte => chars[byte % chars.length]).join('')
     return `${Date.now()}_${random8}`
   }
 

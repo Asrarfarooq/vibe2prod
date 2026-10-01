@@ -116,8 +116,10 @@ export class CodingChallengeFixItComponent implements OnInit, AfterViewInit, OnD
   }
 
   shuffle (): void {
+    const randomVals = new Uint32Array(this.fixes().length)
+    crypto.getRandomValues(randomVals)
     this.randomFixes = this.fixes()
-      .map((fix, index) => ({ fix, index, sort: Math.random() }))
+      .map((fix, index) => ({ fix, index, sort: randomVals[index] }))
       .sort((a, b) => a.sort - b.sort)
       .map(({ fix, index }) => ({ fix, index }))
   }

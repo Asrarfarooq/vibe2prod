@@ -130,10 +130,6 @@ import { ensureFileIsPassed, handleZipFileUpload, checkUploadSize, checkFileType
 const app = express()
 const server = new http.Server(app)
 
-// errorhandler requires us from overwriting a string property on it's module which is a big no-no with esmodules :/
-
-const errorhandler = require('errorhandler')
-
 const startTime = Date.now()
 
 const swaggerDocument = yaml.load(fs.readFileSync('./swagger.yml', 'utf8'))
@@ -178,14 +174,36 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   /* Compression for all requests */
   app.use(compression())
 
-  /* Bludgeon solution for possible CORS problems: Allow everything! */
-  app.options('*', cors())
-  app.use(cors())
+  /* Restrict CORS to configured origins */
+  const defaultAllowedOrigins = [
+    config.get<string>('server.baseUrl'),
+    'http://localhost:3000',
+    'http://localhost:4200',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:4200'
+  ].filter(Boolean)
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : defaultAllowedOrigins
+
+  const corsOptions: cors.CorsOptions = {
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'))
+      }
+    },
+    credentials: true
+  }
+  app.options('*', cors(corsOptions))
+  app.use(cors(corsOptions))
 
   /* Security middleware */
-  app.use(helmet.noSniff())
-  app.use(helmet.frameguard())
-  // app.use(helmet.xssFilter()); // = no protection from persisted XSS via RESTful API
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+  }))
   app.disable('x-powered-by')
   app.use(featurePolicy({
     features: {
@@ -305,7 +323,7 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
 
   app.use(express.static(path.resolve('frontend/dist/frontend')))
-  app.use(cookieParser('kekse'))
+  app.use(cookieParser(process.env.COOKIE_SECRET || 'kekse'))
   // vuln-code-snippet end directoryListingChallenge accessLogDisclosureChallenge
 
   /* Serve vendor dependencies locally instead of from CDN */
@@ -698,7 +716,18 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
 
   /* Error Handling */
   app.use(verify.errorHandlingChallenge())
-  app.use(errorhandler())
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    logger.error(err)
+    if (res.headersSent) {
+      return next(err)
+    }
+    const status = typeof err.status === 'number' ? err.status : (typeof err.statusCode === 'number' ? err.statusCode : 500)
+    res.status(status).json({
+      error: {
+        message: status === 500 ? 'Internal Server Error' : (err.message || 'An error occurred')
+      }
+    })
+  })
 }
 
 // Function called first to ensure that all the i18n files are reloaded successfully before other linked operations.
@@ -748,7 +777,6 @@ logger.info(`Entity models ${colors.bold(Object.keys(sequelize.models).length.to
 let metricsUpdateLoop: any
 const Metrics = metrics.observeMetrics() // vuln-code-snippet neutral-line exposedMetricsChallenge
 app.get('/metrics', utils.asyncHandler(metrics.serveMetrics())) // vuln-code-snippet vuln-line exposedMetricsChallenge
-errorhandler.title = `${config.get<string>('application.name')} (Express ${utils.version('express')})`
 
 export async function start (readyCallback?: () => void) {
   const datacreatorEnd = startupGauge.startTimer({ task: 'datacreator' })
