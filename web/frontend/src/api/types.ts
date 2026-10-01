@@ -71,6 +71,10 @@ export interface Stage {
   feedback: Feedback | null;
 }
 
+export interface StageAttempt extends Stage {
+  archived_at: string;
+}
+
 export interface Feedback {
   text: string;
   by: string;
@@ -159,6 +163,7 @@ export interface Api {
   startRun(projectId: string, approverKey: string): Promise<Run>;
   getRun(id: string): Promise<Run>;
   getEvents(id: string, after: number): Promise<{ events: RunEvent[] }>;
+  getAttempts(id: string): Promise<{ attempts: StageAttempt[] }>;
   subscribe(id: string, handlers: StreamHandlers): () => void;
   decide(
     id: string,

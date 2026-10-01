@@ -86,31 +86,31 @@ def iso(value: Any) -> str | None:
     return str(value)
 
 
+def serialize_stage(key: str, name: str, description: str, stage: dict) -> dict:
+    decision = stage.get("decision")
+    return {
+        "key": key,
+        "name": name,
+        "agent_description": description,
+        "status": stage.get("status", "queued"),
+        "started_at": iso(stage.get("started_at")),
+        "ended_at": iso(stage.get("ended_at")),
+        "summary": stage.get("summary"),
+        "decision": {**decision, "at": iso(decision.get("at"))} if decision else None,
+        "artifacts": stage.get("artifacts", []),
+        "attempt": stage.get("attempt", 1),
+        "feedback": {**feedback, "at": iso(feedback.get("at"))}
+        if (feedback := stage.get("feedback"))
+        else None,
+    }
+
+
 def serialize_run(run_id: str, doc: dict) -> dict:
     stored = doc.get("stages", {})
-    stages = []
-    for key, name, description in STAGES:
-        stage = stored.get(key, {})
-        decision = stage.get("decision")
-        stages.append(
-            {
-                "key": key,
-                "name": name,
-                "agent_description": description,
-                "status": stage.get("status", "queued"),
-                "started_at": iso(stage.get("started_at")),
-                "ended_at": iso(stage.get("ended_at")),
-                "summary": stage.get("summary"),
-                "decision": {**decision, "at": iso(decision.get("at"))}
-                if decision
-                else None,
-                "artifacts": stage.get("artifacts", []),
-                "attempt": stage.get("attempt", 1),
-                "feedback": {**feedback, "at": iso(feedback.get("at"))}
-                if (feedback := stage.get("feedback"))
-                else None,
-            }
-        )
+    stages = [
+        serialize_stage(key, name, description, stored.get(key, {}))
+        for key, name, description in STAGES
+    ]
     return {
         "id": run_id,
         "number": doc.get("number"),
@@ -223,6 +223,27 @@ async def list_project_runs(project_id: str) -> dict:
 @app.get("/api/runs/{run_id}")
 async def get_run(run_id: str) -> dict:
     return await load_run(run_id)
+
+
+@app.get("/api/runs/{run_id}/attempts")
+async def get_attempts(run_id: str) -> dict:
+    await load_run(run_id)
+    names = {key: (name, description) for key, name, description in STAGES}
+    query = (
+        db.collection("runs")
+        .document(run_id)
+        .collection("attempts")
+        .order_by("archived_at")
+    )
+    attempts = []
+    async for snap in query.stream():
+        doc = snap.to_dict()
+        if doc.get("stage") in names:
+            stage = serialize_stage(
+                doc["stage"], *names[doc["stage"]], doc.get("data") or {}
+            )
+            attempts.append({**stage, "archived_at": iso(doc.get("archived_at"))})
+    return {"attempts": attempts}
 
 
 async def events_after(run_id: str, after: int) -> list[dict]:
@@ -483,6 +504,9 @@ async def decide(
             updates["current_stage"] = next_stage
             updates[f"stages.{next_stage}.status"] = "running"
             updates[f"stages.{next_stage}.started_at"] = now
+            updates[f"stages.{next_stage}.attempt"] = (
+                doc.get("prior_attempts", {}).get(next_stage, 0) + 1
+            )
         else:
             updates["status"] = "succeeded"
             updates["current_stage"] = None
@@ -557,7 +581,14 @@ async def rerun(
         for later in STAGE_KEYS[index + 1 :]:
             if later in stages:
                 updates[f"stages.{later}"] = firestore.DELETE_FIELD
+                updates[f"prior_attempts.{later}"] = stages[later].get("attempt", 1)
         transaction.update(run_ref, updates)
+        for key in STAGE_KEYS[index:]:
+            if key in stages:
+                transaction.set(
+                    run_ref.collection("attempts").document(),
+                    {"stage": key, "archived_at": now, "data": stages[key]},
+                )
         transaction.set(
             run_ref.collection("decisions").document(),
             {

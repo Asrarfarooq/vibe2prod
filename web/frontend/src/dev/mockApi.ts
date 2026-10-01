@@ -1,5 +1,5 @@
 // Development-only fixture API, loaded when VITE_MOCK=1.
-import type { Api, Artifact, Project, Run, RunEvent, RunSummary, Stage, StageKey, StreamHandlers } from "../api/types";
+import type { Api, Artifact, Project, Run, RunEvent, RunSummary, Stage, StageAttempt, StageKey, StreamHandlers } from "../api/types";
 import { ApiError } from "../api/client";
 
 const ME = "asrarfarooq@gcp.altostrat.com";
@@ -471,6 +471,7 @@ interface Store {
   events: RunEvent[];
   pending: RunEvent[];
   listeners: Set<StreamHandlers>;
+  attempts?: StageAttempt[];
 }
 
 const stores = new Map<string, Store>();
@@ -651,6 +652,10 @@ export const mockApi: Api = {
     await delay(200);
     return { events: get(id).events.filter((e) => e.seq > after).map(clone) };
   },
+  async getAttempts(id) {
+    await delay(150);
+    return { attempts: (get(id).attempts ?? []).map(clone) };
+  },
   subscribe(id, h) {
     const s = get(id);
     s.listeners.add(h);
@@ -710,6 +715,10 @@ export const mockApi: Api = {
     if (s.run.status === "running") throw new ApiError(409, "A stage is still running; wait for it to finish");
     if (!["awaiting_approval", "approved", "denied", "failed"].includes(st.status)) throw new ApiError(409, "This stage has not run yet");
     const now = new Date().toISOString();
+    s.attempts = [
+      ...(s.attempts ?? []),
+      ...s.run.stages.slice(idx).filter((x) => x.status !== "queued").map((x) => ({ ...clone(x), archived_at: now })),
+    ];
     s.run.stages[idx] = stage(key, { status: "running", started_at: now, attempt: st.attempt + 1, feedback: { text, by: ME, at: now } });
     for (let i = idx + 1; i < s.run.stages.length; i++) s.run.stages[i] = stage(s.run.stages[i].key, {});
     s.run.status = "running";

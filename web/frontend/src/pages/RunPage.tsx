@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getApi } from "../api/client";
-import type { Run, StageKey } from "../api/types";
+import type { Run, StageAttempt, StageKey } from "../api/types";
 import { useRun } from "../api/useRun";
 import { TopBar, type Crumb } from "../components/TopBar";
 import { PipelineStepper } from "../components/PipelineStepper";
@@ -73,6 +73,20 @@ export function RunPage({ projectId, id }: { projectId: string; id: string }) {
     if (!run) return;
     if (!picked.current || selected === null) setSelected(defaultStage(run));
   }, [run, selected]);
+
+  const [attempts, setAttempts] = useState<StageAttempt[]>([]);
+  const attemptSig = run ? run.stages.map((x) => `${x.key}:${x.attempt}:${x.started_at ?? ""}`).join("|") : "";
+  useEffect(() => {
+    if (!attemptSig) return;
+    let cancelled = false;
+    getApi()
+      .then((api) => api.getAttempts(id))
+      .then((b) => !cancelled && setAttempts(b.attempts))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [id, attemptSig]);
 
   const projectLabel = projectName ?? projectId;
 
@@ -201,7 +215,15 @@ export function RunPage({ projectId, id }: { projectId: string; id: string }) {
         <PipelineStepper stages={run.stages} selected={stage.key} onSelect={select} now={now} />
 
         <div className={s.grid}>
-          <StageDetail stage={stage} index={stageIdx} events={events} tab={tab} onTab={setTab} />
+          <StageDetail
+            key={`${stage.key}-${stage.attempt}`}
+            stage={stage}
+            index={stageIdx}
+            events={events}
+            history={attempts.filter((a) => a.key === stage.key)}
+            tab={tab}
+            onTab={setTab}
+          />
           <aside className={s.rail} aria-label="Decision, artifacts and readiness">
             {failedIdx >= 0 && (
               <RerunPanel

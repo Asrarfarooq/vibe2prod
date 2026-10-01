@@ -1,5 +1,5 @@
-import { useMemo, useRef, type KeyboardEvent } from "react";
-import type { RunEvent, Stage } from "../api/types";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import type { RunEvent, Stage, StageAttempt } from "../api/types";
 import { EventLog } from "./EventLog";
 import { ArtifactViewer } from "./Artifacts";
 import { StatusIcon } from "./Icons";
@@ -18,13 +18,30 @@ interface Props {
   stage: Stage;
   index: number;
   events: RunEvent[];
+  history: StageAttempt[];
   tab: Tab;
   onTab: (t: Tab) => void;
 }
 
-export function StageDetail({ stage, index, events, tab, onTab }: Props) {
+const time = (iso: string | null) => (iso ? new Date(iso).getTime() : null);
+
+export function StageDetail({ stage: current, index, events, history, tab, onTab }: Props) {
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const stageEvents = useMemo(() => events.filter((e) => e.stage === stage.key), [events, stage.key]);
+  const [pick, setPick] = useState<number | null>(null);
+  const attempts: Stage[] = useMemo(() => [...history, current], [history, current]);
+  const shown = pick !== null && pick < history.length ? pick : attempts.length - 1;
+  const stage = attempts[shown];
+  const archived = shown < history.length ? history[shown] : null;
+  // Each attempt owns the events from its start until the next attempt starts.
+  const stageEvents = useMemo(() => {
+    const from = shown === 0 ? -Infinity : (time(attempts[shown].started_at) ?? Infinity);
+    const next = attempts.slice(shown + 1).map((a) => time(a.started_at)).find((t) => t !== null) ?? Infinity;
+    return events.filter((e) => {
+      if (e.stage !== current.key) return false;
+      const t = new Date(e.ts).getTime();
+      return t >= from && t < next;
+    });
+  }, [events, current.key, attempts, shown]);
   const lastError = useMemo(() => {
     if (stage.status !== "failed") return null;
     for (let i = stageEvents.length - 1; i >= 0; i--) if (stageEvents[i].kind === "error") return stageEvents[i];
@@ -61,10 +78,35 @@ export function StageDetail({ stage, index, events, tab, onTab }: Props) {
           <h2 id="stage-title" className={s.title}>
             <span className={`${s.num} num`}>{index + 1}</span>
             {stage.name}
-            {stage.attempt > 1 && <span className={`${s.attempt} num`}>Attempt {stage.attempt}</span>}
+            {history.length === 0 && stage.attempt > 1 && <span className={`${s.attempt} num`}>Attempt {stage.attempt}</span>}
           </h2>
+          {history.length > 0 && (
+            <div className={s.attempts} role="group" aria-label="Attempts">
+              {attempts.map((a, i) => (
+                <button
+                  key={i}
+                  id={`attempt-${i + 1}`}
+                  type="button"
+                  className={`${s.attemptBtn} num`}
+                  aria-pressed={i === shown}
+                  onClick={() => setPick(i === attempts.length - 1 ? null : i)}
+                >
+                  Attempt {i < history.length ? a.attempt : Math.max(a.attempt, history[history.length - 1].attempt + 1)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <p className={s.desc}>{stage.agent_description}</p>
+        {archived && (
+          <p className={s.archived}>
+            Earlier attempt, replaced{" "}
+            <time className="num" dateTime={archived.archived_at} title={absolute(archived.archived_at)}>
+              {clock(archived.archived_at)}
+            </time>
+            . Shows what it produced then.
+          </p>
+        )}
       </header>
 
       {lastError && (
@@ -115,7 +157,7 @@ export function StageDetail({ stage, index, events, tab, onTab }: Props) {
                 <p className={s.feedbackText}>{stage.feedback.text}</p>
               </div>
             )}
-            <EventLog key={stage.key} events={stageEvents} origin={origin} stageKey={stage.key} live={stage.status === "running"} />
+            <EventLog key={stage.key} events={stageEvents} origin={origin} stageKey={stage.key} live={!archived && stage.status === "running"} />
           </>
         )}
         {tab === "artifacts" && (

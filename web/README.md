@@ -36,9 +36,10 @@ web/
 | `POST /api/projects/{id}/runs` | Start a run. One active run per project (409 otherwise). Starts `codeguard-agent`; returns 502 and marks the run failed if the job cannot start |
 | `GET /api/runs/{id}` | Run with all four stages |
 | `GET /api/runs/{id}/events?after=<seq>` | Events after a sequence number |
+| `GET /api/runs/{id}/attempts` | Earlier attempts of stages, oldest first, each in the stage shape plus `archived_at` |
 | `GET /api/runs/{id}/stream` | SSE: `event` messages for new events and `run` messages for run doc changes. Supports `Last-Event-ID` backfill; heartbeat every 15 s |
 | `POST /api/runs/{id}/stages/{stage}/decision` | Body `{"decision": "approve" \| "deny", "reason": ...}`. Deny needs a reason. 409 if already decided or not awaiting approval. Approve starts `<next-stage>-agent` |
-| `POST /api/runs/{id}/stages/{stage}/rerun` | Body `{"feedback": "..."}` (1-4000 chars). Allowed when the stage is `awaiting_approval`, `approved`, `denied` or `failed` and the run is not running (409 otherwise). Resets the stage to running with `attempt + 1` and the feedback recorded, deletes later stages, clears the score and starts `<stage>-agent`, which reads the feedback. 502 and marks the stage failed if the job cannot start |
+| `POST /api/runs/{id}/stages/{stage}/rerun` | Body `{"feedback": "..."}` (1-4000 chars). Allowed when the stage is `awaiting_approval`, `approved`, `denied` or `failed` and the run is not running (409 otherwise). Saves the stage and later stages to `runs/{id}/attempts`, resets the stage to running with `attempt + 1` and the feedback recorded, deletes later stages, clears the score and starts `<stage>-agent`, which reads the feedback. 502 and marks the stage failed if the job cannot start |
 
 All POST endpoints require headers `X-Requested-With: vibe2prod` and `X-Approver-Key: <key>`. Keys come from the `APPROVER_KEYS` env var, a JSON object mapping approver email to key, intended to be injected from Secret Manager secret `dashboard-approver-keys`. The matched email is recorded as `started_by`, as the decider, or as the feedback author. The browser keeps the key in `sessionStorage` (this tab only, cleared when the tab closes). Every response sets a strict Content Security Policy and related security headers; `/api/*` responses are `no-store`.
 

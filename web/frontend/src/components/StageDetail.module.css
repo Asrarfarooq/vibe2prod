@@ -46,6 +46,40 @@
   color: var(--text-muted);
 }
 
+.attempts {
+  display: flex;
+  gap: var(--space-1);
+  flex: none;
+}
+
+.attemptBtn {
+  font: inherit;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+}
+
+.attemptBtn:hover {
+  color: var(--text);
+}
+
+.attemptBtn[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--text-muted);
+  background: var(--surface-2);
+}
+
+.archived {
+  margin-top: var(--space-1);
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
 .feedback {
   flex: none;
   padding: var(--space-3) var(--space-5);

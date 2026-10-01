@@ -48,6 +48,7 @@ const httpApi: Api = {
     }),
   getRun: (id) => request(`/api/runs/${enc(id)}`),
   getEvents: (id, after) => request(`/api/runs/${enc(id)}/events?after=${after}`),
+  getAttempts: (id) => request(`/api/runs/${enc(id)}/attempts`),
   decide: (id: string, stage: StageKey, decision, reason, approverKey) =>
     request<Run>(`/api/runs/${enc(id)}/stages/${enc(stage)}/decision`, {
       method: "POST",
