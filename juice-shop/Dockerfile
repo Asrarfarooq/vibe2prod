@@ -1,8 +1,8 @@
-FROM node:24-slim AS installer
+FROM node:24 AS installer
 WORKDIR /juice-shop
 COPY . /juice-shop
 RUN npm install -g typescript@^6.0.3
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 RUN npm dedupe --omit=dev
 RUN rm -rf frontend/node_modules
 RUN rm -rf frontend/.angular
