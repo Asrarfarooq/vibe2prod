@@ -1,0 +1,424 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="title desc">
+  <title id="title">Vibe2Prod — how the agents work together</title>
+  <desc id="desc">An approver starts a run from the dashboard. Four ADK agents run in sequence — CodeGuard, Architect + Critic, IaC + Cost, Deploy + Audit — each calling Gemini on Vertex AI, streaming events to Firestore, and pausing at a human approval gate. The run ends with a production-ready app on Cloud Run and a readiness score.</desc>
+
+  <defs>
+    <linearGradient id="gem" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4FC3F7"/>
+      <stop offset=".55" stop-color="#7C6CFF"/>
+      <stop offset="1" stop-color="#F06292"/>
+    </linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#0E1627"/>
+    </linearGradient>
+    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M30 0H0V30" fill="none" stroke="#FFFFFF" stroke-opacity=".035"/>
+    </pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3A4766"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#34A853"/>
+    </marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4285F4"/>
+    </marker>
+  </defs>
+
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .w  { fill: #E6EDF3; }
+    .m  { fill: #9AA4B2; }
+    .d  { fill: #6B778C; }
+    .b  { font-weight: 700; }
+    .card { fill: #121A2B; stroke: #2A3650; stroke-width: 1.5; }
+    .chip { fill: #1A2336; stroke: #2A3650; }
+    .chipT { fill: #8A96AD; font-size: 10px; font-weight: 600; text-anchor: middle; }
+    .litT { fill: #FFFFFF; font-size: 10px; font-weight: 600; text-anchor: middle; }
+    .wire { stroke: #2A3650; stroke-width: 1.5; fill: none; }
+    .flow { stroke: #B8AFFF; stroke-width: 2; fill: none; stroke-dasharray: 6 6; animation: dash .8s linear infinite; }
+
+    /* ---------- master timeline: 28 s, everything synced to the same clock ---------- */
+    .a1,.a2,.a3,.a4,.any,.am1,.am2,.am3,.am4,.g1,.g2,.g3,.g4,
+    .c11,.c12,.c13,.c14,.c21,.c22,.c23,.c31,.c32,.c33,.c41,.c42,.c43,
+    .sp,.af,.ln,.k0,.k1,.k2,.k3,.k4,.k5,.p1,.p2,.p3,.live,.sn { opacity: 0; }
+
+    .a1 { animation: card1 28s linear infinite; }
+    .a2 { animation: card2 28s linear infinite; }
+    .a3 { animation: card3 28s linear infinite; }
+    .a4 { animation: card4 28s linear infinite; }
+    .any { animation: any 28s linear infinite; }
+    .am1 { animation: amber1 28s linear infinite; }
+    .am2 { animation: amber2 28s linear infinite; }
+    .am3 { animation: amber3 28s linear infinite; }
+    .am4 { animation: amber4 28s linear infinite; }
+    .g1 { animation: green1 28s linear infinite; }
+    .g2 { animation: green2 28s linear infinite; }
+    .g3 { animation: green3 28s linear infinite; }
+    .g4 { animation: green4 28s linear infinite; }
+    .c11 { animation: c11 28s linear infinite; } .c12 { animation: c12 28s linear infinite; }
+    .c13 { animation: c13 28s linear infinite; } .c14 { animation: c14 28s linear infinite; }
+    .c21 { animation: c21 28s linear infinite; } .c22 { animation: c22 28s linear infinite; } .c23 { animation: c23 28s linear infinite; }
+    .c31 { animation: c31 28s linear infinite; } .c32 { animation: c32 28s linear infinite; } .c33 { animation: c33 28s linear infinite; }
+    .c41 { animation: c41 28s linear infinite; } .c42 { animation: c42 28s linear infinite; } .c43 { animation: c43 28s linear infinite; }
+    .sp { animation: startPulse 28s linear infinite; }
+    .af { animation: approveFlash 28s linear infinite; }
+    .ln { animation: launch 28s linear infinite; }
+    .k0 { animation: cap0 28s linear infinite; } .k1 { animation: cap1 28s linear infinite; }
+    .k2 { animation: cap2 28s linear infinite; } .k3 { animation: cap3 28s linear infinite; }
+    .k4 { animation: cap4 28s linear infinite; } .k5 { animation: cap5 28s linear infinite; }
+    .p1 { animation: pr1 28s linear infinite; } .p2 { animation: pr2 28s linear infinite; } .p3 { animation: pr3 28s linear infinite; }
+    .live { animation: appLive 28s linear infinite; }
+    .ring { stroke-dasharray: 163.4; stroke-dashoffset: 163.4; animation: scoreFill 28s linear infinite; }
+    .sn { animation: scoreNum 28s linear infinite; }
+
+    /* short loops, gated by the parent group's visibility */
+    .drop { animation: fall 1.1s linear infinite; }
+    .drop2 { animation: fall 1.1s linear infinite; animation-delay: -.55s; }
+    .sse { animation: sse 1.6s linear infinite; }
+    .sse2 { animation: sse 1.6s linear infinite; animation-delay: -.8s; }
+    .blink { animation: blink 1s ease-in-out infinite; }
+
+    /* stage windows: 2–7 s, 8–13 s, 14–19 s, 20–25 s (work) → amber gate → green at +5.6 s */
+    @keyframes card1 { 0%,7.14%{opacity:0} 8.21%,25%{opacity:1} 26.07%,100%{opacity:0} }
+    @keyframes card2 { 0%,28.57%{opacity:0} 29.64%,46.43%{opacity:1} 47.5%,100%{opacity:0} }
+    @keyframes card3 { 0%,50%{opacity:0} 51.07%,67.86%{opacity:1} 68.93%,100%{opacity:0} }
+    @keyframes card4 { 0%,71.43%{opacity:0} 72.5%,89.29%{opacity:1} 90.36%,100%{opacity:0} }
+    @keyframes any { 0%,7.14%{opacity:0} 8.21%,25%{opacity:1} 26.07%,28.57%{opacity:0} 29.64%,46.43%{opacity:1} 47.5%,50%{opacity:0} 51.07%,67.86%{opacity:1} 68.93%,71.43%{opacity:0} 72.5%,89.29%{opacity:1} 90.36%,100%{opacity:0} }
+    @keyframes amber1 { 0%,25%{opacity:0} 25.5%{opacity:1} 26.07%{opacity:.3} 26.6%{opacity:1} 27.14%,100%{opacity:0} }
+    @keyframes amber2 { 0%,46.43%{opacity:0} 46.93%{opacity:1} 47.5%{opacity:.3} 48.03%{opacity:1} 48.57%,100%{opacity:0} }
+    @keyframes amber3 { 0%,67.86%{opacity:0} 68.36%{opacity:1} 68.93%{opacity:.3} 69.46%{opacity:1} 70%,100%{opacity:0} }
+    @keyframes amber4 { 0%,89.29%{opacity:0} 89.79%{opacity:1} 90.36%{opacity:.3} 90.89%{opacity:1} 91.43%,100%{opacity:0} }
+    @keyframes green1 { 0%,27.14%{opacity:0} 27.86%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes green2 { 0%,48.57%{opacity:0} 49.29%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes green3 { 0%,70%{opacity:0} 70.71%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes green4 { 0%,91.43%{opacity:0} 92.14%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c11 { 0%,9.29%{opacity:0} 10.36%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c12 { 0%,12.14%{opacity:0} 13.21%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c13 { 0%,15%{opacity:0} 16.07%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c14 { 0%,17.86%{opacity:0} 18.93%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c21 { 0%,31.43%{opacity:0} 32.5%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c22 { 0%,35.71%{opacity:0} 36.78%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c23 { 0%,41.43%{opacity:0} 42.5%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c31 { 0%,52.86%{opacity:0} 53.93%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c32 { 0%,57.86%{opacity:0} 58.93%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c33 { 0%,62.86%{opacity:0} 63.93%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c41 { 0%,74.29%{opacity:0} 75.36%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c42 { 0%,79.29%{opacity:0} 80.36%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes c43 { 0%,84.29%{opacity:0} 85.36%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes startPulse { 0%,2.14%{opacity:0} 3.57%{opacity:1} 5.71%,100%{opacity:0} }
+    @keyframes launch { 0%,5.71%{transform:translateX(0);opacity:0} 6%{opacity:1} 7.14%{transform:translateX(44px);opacity:1} 7.5%,100%{transform:translateX(44px);opacity:0} }
+    @keyframes approveFlash { 0%,27.14%{opacity:0} 27.5%{opacity:1} 28.57%,48.57%{opacity:0} 48.93%{opacity:1} 50%,70%{opacity:0} 70.36%{opacity:1} 71.43%,91.43%{opacity:0} 91.79%{opacity:1} 92.86%,100%{opacity:0} }
+    @keyframes cap0 { 0%,6.43%{opacity:1} 7.14%,100%{opacity:0} }
+    @keyframes cap1 { 0%,7.14%{opacity:0} 7.86%,27.86%{opacity:1} 28.57%,100%{opacity:0} }
+    @keyframes cap2 { 0%,28.57%{opacity:0} 29.29%,49.29%{opacity:1} 50%,100%{opacity:0} }
+    @keyframes cap3 { 0%,50%{opacity:0} 50.71%,70.71%{opacity:1} 71.43%,100%{opacity:0} }
+    @keyframes cap4 { 0%,71.43%{opacity:0} 72.14%,91.43%{opacity:1} 92.14%,100%{opacity:0} }
+    @keyframes cap5 { 0%,92.14%{opacity:0} 92.86%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes pr1 { 0%,23.57%{opacity:0} 24.29%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes pr2 { 0%,45%{opacity:0} 45.71%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes pr3 { 0%,66.43%{opacity:0} 67.14%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes appLive { 0%,82.14%{opacity:0} 83.21%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes scoreFill { 0%,87.14%{stroke-dashoffset:163.4} 90.71%,96.43%{stroke-dashoffset:9.8} 100%{stroke-dashoffset:163.4} }
+    @keyframes scoreNum { 0%,90%{opacity:0} 90.71%,96.43%{opacity:1} 100%{opacity:0} }
+    @keyframes fall { 0%{transform:translateY(0);opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{transform:translateY(66px);opacity:0} }
+    @keyframes sse { 0%{transform:translate(0,0);opacity:0} 10%{opacity:1} 60%{transform:translate(-134px,0)} 92%{transform:translate(-134px,-89px);opacity:1} 100%{transform:translate(-134px,-89px);opacity:0} }
+    @keyframes dash { to { stroke-dashoffset: -24; } }
+    @keyframes blink { 0%,100%{opacity:.25} 50%{opacity:1} }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; }
+    }
+  </style>
+
+  <!-- ================= background ================= -->
+  <rect width="1200" height="675" fill="url(#bg)"/>
+  <rect width="1200" height="675" fill="url(#grid)"/>
+
+  <!-- ================= title ================= -->
+  <text x="600" y="44" text-anchor="middle" font-size="28" class="b" fill="url(#gem)">Vibe2Prod</text>
+  <text x="600" y="70" text-anchor="middle" font-size="14" class="m">How the agents work together — one run, four stages, a human gate between each</text>
+
+  <!-- ================= Gemini ================= -->
+  <rect x="455" y="98" width="290" height="50" rx="12" class="card"/>
+  <rect x="455" y="98" width="290" height="50" rx="12" fill="none" stroke="url(#gem)" stroke-width="1.5" opacity=".8"/>
+  <circle cx="480" cy="123" r="10" fill="#7C6CFF" opacity=".35">
+    <animate attributeName="r" values="9;15;9" dur="1.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values=".35;0;.35" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+  <path d="M480,111 C481.5,118.5 484.5,121.5 492,123 C484.5,124.5 481.5,127.5 480,135 C478.5,127.5 475.5,124.5 468,123 C475.5,121.5 478.5,118.5 480,111 Z" fill="url(#gem)"/>
+  <text x="500" y="119" font-size="14" class="w b">Gemini on Vertex AI</text>
+  <text x="500" y="136" font-size="11" class="m">gemini-3.8-flash · thinking HIGH</text>
+
+  <!-- Gemini bus (dim) -->
+  <path d="M600,148 V180 M418,180 H976 M418,180 V240 M604,180 V240 M790,180 V240 M976,180 V240" stroke="#7C6CFF" stroke-opacity=".22" stroke-width="1.5" fill="none" stroke-dasharray="3 5"/>
+  <!-- Gemini bus (lit per stage) -->
+  <g class="a1"><path class="flow" d="M600,148 V180 H418 V240"/></g>
+  <g class="a2"><path class="flow" d="M600,148 V180 H604 V240"/></g>
+  <g class="a3"><path class="flow" d="M600,148 V180 H790 V240"/></g>
+  <g class="a4"><path class="flow" d="M600,148 V180 H976 V240"/></g>
+
+  <!-- ================= Approver ================= -->
+  <circle cx="70" cy="318" r="11" fill="#C7D2E3"/>
+  <path d="M50,352 c0,-13 9,-19 20,-19 s20,6 20,19 z" fill="#C7D2E3"/>
+  <text x="70" y="370" text-anchor="middle" font-size="12" class="w b">Approver</text>
+  <text x="70" y="384" text-anchor="middle" font-size="9.5" class="d">human-in-the-loop</text>
+  <line x1="94" y1="345" x2="128" y2="345" class="wire" marker-end="url(#arr)"/>
+
+  <!-- ================= Dashboard ================= -->
+  <rect x="132" y="240" width="168" height="210" rx="14" class="card"/>
+  <text x="216" y="268" text-anchor="middle" font-size="14" class="w b">Dashboard</text>
+  <text x="216" y="283" text-anchor="middle" font-size="10" class="m">Cloud Run · React + FastAPI</text>
+  <!-- Start run -->
+  <rect x="150" y="300" width="132" height="28" rx="8" fill="#4285F4"/>
+  <path d="M178,308 l 9,6 l -9,6 z" fill="#FFFFFF"/>
+  <text x="222" y="318.5" text-anchor="middle" font-size="12" fill="#FFFFFF" class="b">Start run</text>
+  <rect x="146" y="296" width="140" height="36" rx="11" fill="none" stroke="#8AB4F8" stroke-width="3" class="sp"/>
+  <!-- Approve -->
+  <rect x="150" y="336" width="132" height="28" rx="8" fill="#15231C" stroke="#34A853"/>
+  <path d="M176,350 l 5,5 l 10,-10" fill="none" stroke="#34A853" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="224" y="354.5" text-anchor="middle" font-size="12" fill="#7EE2A0" class="b">Approve</text>
+  <rect x="146" y="332" width="140" height="36" rx="11" fill="none" stroke="#34A853" stroke-width="3" class="af"/>
+  <!-- live event log -->
+  <rect x="150" y="374" width="132" height="64" rx="8" fill="#0E1522" stroke="#1F2A40"/>
+  <text x="158" y="387" font-size="9" class="d">live events</text>
+  <g class="any">
+    <circle cx="273" cy="384" r="3" fill="#4FC3F7" class="blink"/>
+    <rect x="158" y="395" width="60" height="4" rx="2" fill="#4FC3F7" opacity=".75"><animate attributeName="width" values="46;110;72;104;58" dur="2.4s" repeatCount="indefinite"/></rect>
+    <rect x="158" y="405" width="80" height="4" rx="2" fill="#B8AFFF" opacity=".6"><animate attributeName="width" values="96;52;112;64;90" dur="2.1s" repeatCount="indefinite"/></rect>
+    <rect x="158" y="415" width="50" height="4" rx="2" fill="#4FC3F7" opacity=".5"><animate attributeName="width" values="40;88;56;108;44" dur="2.7s" repeatCount="indefinite"/></rect>
+    <rect x="158" y="425" width="70" height="4" rx="2" fill="#7EE2A0" opacity=".5"><animate attributeName="width" values="70;40;100;60;86" dur="2.3s" repeatCount="indefinite"/></rect>
+  </g>
+  <!-- Dashboard -> first job -->
+  <line x1="300" y1="345" x2="348" y2="345" class="wire" marker-end="url(#arr)"/>
+  <circle cx="302" cy="345" r="4" fill="#8AB4F8" class="ln"/>
+
+  <!-- ================= Agent cards ================= -->
+  <!-- connectors to Firestore (dim) -->
+  <path d="M418,450 V520 M604,450 V520 M790,450 V520 M976,450 V520" class="wire"/>
+
+  <!-- 1 · CodeGuard -->
+  <rect x="350" y="240" width="136" height="210" rx="14" class="card"/>
+  <g class="a1">
+    <rect x="350" y="240" width="136" height="210" rx="14" fill="none" stroke="#4285F4" stroke-width="10" opacity=".18"/>
+    <rect x="350" y="240" width="136" height="210" rx="14" fill="none" stroke="#4285F4" stroke-width="2.5"/>
+    <circle cx="468" cy="256" r="6" fill="none" stroke="#4285F4" stroke-width="2.5" stroke-dasharray="20 18" stroke-linecap="round">
+      <animateTransform attributeName="transform" type="rotate" from="0 468 256" to="360 468 256" dur="1s" repeatCount="indefinite"/>
+    </circle>
+    <g><circle cx="418" cy="452" r="3.5" fill="#4FC3F7" class="drop"/><circle cx="418" cy="452" r="3.5" fill="#4FC3F7" class="drop2"/></g>
+  </g>
+  <g class="g1">
+    <rect x="350" y="240" width="136" height="210" rx="14" fill="none" stroke="#34A853" stroke-width="2"/>
+    <circle cx="468" cy="256" r="8" fill="#34A853"/>
+    <path d="M464,256 l 3,3 l 6,-6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <circle cx="418" cy="274" r="18" fill="#4285F4"/>
+  <path d="M418,262 l 11,4 v 9 c 0,7 -5,11 -11,14 c -6,-3 -11,-7 -11,-14 v -9 z" fill="#FFFFFF"/>
+  <text x="418" y="310" text-anchor="middle" font-size="14" class="w b">1 · CodeGuard</text>
+  <text x="418" y="324" text-anchor="middle" font-size="10" class="m">scan + fix + PR</text>
+  <rect x="358" y="334" width="120" height="20" rx="6" class="chip"/><text x="418" y="348" class="chipT">gitleaks · secrets</text>
+  <g class="c11"><rect x="358" y="334" width="120" height="20" rx="6" fill="#233960" stroke="#4285F4"/><text x="418" y="348" class="litT">gitleaks · secrets</text></g>
+  <rect x="358" y="358" width="120" height="20" rx="6" class="chip"/><text x="418" y="372" class="chipT">semgrep · code</text>
+  <g class="c12"><rect x="358" y="358" width="120" height="20" rx="6" fill="#233960" stroke="#4285F4"/><text x="418" y="372" class="litT">semgrep · code</text></g>
+  <rect x="358" y="382" width="120" height="20" rx="6" class="chip"/><text x="418" y="396" class="chipT">osv-scanner · deps</text>
+  <g class="c13"><rect x="358" y="382" width="120" height="20" rx="6" fill="#233960" stroke="#4285F4"/><text x="418" y="396" class="litT">osv-scanner · deps</text></g>
+  <rect x="358" y="406" width="120" height="20" rx="6" class="chip"/><text x="418" y="420" class="chipT">hadolint · Dockerfile</text>
+  <g class="c14"><rect x="358" y="406" width="120" height="20" rx="6" fill="#233960" stroke="#4285F4"/><text x="418" y="420" class="litT">hadolint · Dockerfile</text></g>
+
+  <!-- gate 1 -->
+  <line x1="486" y1="345" x2="498" y2="345" class="wire"/>
+  <path d="M511,333 L523,345 L511,357 L499,345 Z" class="card"/>
+  <line x1="524" y1="345" x2="535" y2="345" class="wire" marker-end="url(#arr)"/>
+  <text x="511" y="371" text-anchor="middle" font-size="8.5" class="d">approve</text>
+  <g class="am1"><path d="M511,333 L523,345 L511,357 L499,345 Z" fill="#FBBC04"/></g>
+  <g class="g1">
+    <line x1="486" y1="345" x2="498" y2="345" stroke="#34A853" stroke-width="2"/>
+    <path d="M511,333 L523,345 L511,357 L499,345 Z" fill="#34A853"/>
+    <path d="M506,345 l 3.5,3.5 l 6.5,-6.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="524" y1="345" x2="535" y2="345" stroke="#34A853" stroke-width="2" marker-end="url(#arrG)"/>
+  </g>
+
+  <!-- 2 · Architect + Critic -->
+  <rect x="536" y="240" width="136" height="210" rx="14" class="card"/>
+  <g class="a2">
+    <rect x="536" y="240" width="136" height="210" rx="14" fill="none" stroke="#34A853" stroke-width="10" opacity=".18"/>
+    <rect x="536" y="240" width="136" height="210" rx="14" fill="none" stroke="#34A853" stroke-width="2.5"/>
+    <circle cx="654" cy="256" r="6" fill="none" stroke="#34A853" stroke-width="2.5" stroke-dasharray="20 18" stroke-linecap="round">
+      <animateTransform attributeName="transform" type="rotate" from="0 654 256" to="360 654 256" dur="1s" repeatCount="indefinite"/>
+    </circle>
+    <g><circle cx="604" cy="452" r="3.5" fill="#4FC3F7" class="drop"/><circle cx="604" cy="452" r="3.5" fill="#4FC3F7" class="drop2"/></g>
+  </g>
+  <g class="g2">
+    <rect x="536" y="240" width="136" height="210" rx="14" fill="none" stroke="#34A853" stroke-width="2"/>
+    <circle cx="654" cy="256" r="8" fill="#34A853"/>
+    <path d="M650,256 l 3,3 l 6,-6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <circle cx="604" cy="274" r="18" fill="#34A853"/>
+  <path d="M596,264 h 11 l 5,5 v 15 h -16 z" fill="#FFFFFF"/>
+  <path d="M599,275 h 10 M599,279 h 10 M599,283 h 6" stroke="#34A853" stroke-width="1.5"/>
+  <text x="604" y="310" text-anchor="middle" font-size="14" class="w b">2 · Architect</text>
+  <text x="604" y="324" text-anchor="middle" font-size="10" class="m">design doc + critic</text>
+  <rect x="544" y="340" width="120" height="20" rx="6" class="chip"/><text x="604" y="354" class="chipT">draft DESIGN.md</text>
+  <g class="c21"><rect x="544" y="340" width="120" height="20" rx="6" fill="#20403C" stroke="#34A853"/><text x="604" y="354" class="litT">draft DESIGN.md</text></g>
+  <rect x="544" y="366" width="120" height="20" rx="6" class="chip"/><text x="604" y="380" class="chipT">critic · ≤3 rounds</text>
+  <g class="c22"><rect x="544" y="366" width="120" height="20" rx="6" fill="#20403C" stroke="#34A853"/><text x="604" y="380" class="litT">critic · ≤3 rounds</text></g>
+  <rect x="544" y="392" width="120" height="20" rx="6" class="chip"/><text x="604" y="406" class="chipT">IAM · VPC · secrets</text>
+  <g class="c23"><rect x="544" y="392" width="120" height="20" rx="6" fill="#20403C" stroke="#34A853"/><text x="604" y="406" class="litT">IAM · VPC · secrets</text></g>
+
+  <!-- gate 2 -->
+  <line x1="672" y1="345" x2="684" y2="345" class="wire"/>
+  <path d="M697,333 L709,345 L697,357 L685,345 Z" class="card"/>
+  <line x1="710" y1="345" x2="721" y2="345" class="wire" marker-end="url(#arr)"/>
+  <text x="697" y="371" text-anchor="middle" font-size="8.5" class="d">approve</text>
+  <g class="am2"><path d="M697,333 L709,345 L697,357 L685,345 Z" fill="#FBBC04"/></g>
+  <g class="g2">
+    <line x1="672" y1="345" x2="684" y2="345" stroke="#34A853" stroke-width="2"/>
+    <path d="M697,333 L709,345 L697,357 L685,345 Z" fill="#34A853"/>
+    <path d="M692,345 l 3.5,3.5 l 6.5,-6.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="710" y1="345" x2="721" y2="345" stroke="#34A853" stroke-width="2" marker-end="url(#arrG)"/>
+  </g>
+
+  <!-- 3 · IaC + Cost -->
+  <rect x="722" y="240" width="136" height="210" rx="14" class="card"/>
+  <g class="a3">
+    <rect x="722" y="240" width="136" height="210" rx="14" fill="none" stroke="#FBBC04" stroke-width="10" opacity=".18"/>
+    <rect x="722" y="240" width="136" height="210" rx="14" fill="none" stroke="#FBBC04" stroke-width="2.5"/>
+    <circle cx="840" cy="256" r="6" fill="none" stroke="#FBBC04" stroke-width="2.5" stroke-dasharray="20 18" stroke-linecap="round">
+      <animateTransform attributeName="transform" type="rotate" from="0 840 256" to="360 840 256" dur="1s" repeatCount="indefinite"/>
+    </circle>
+    <g><circle cx="790" cy="452" r="3.5" fill="#4FC3F7" class="drop"/><circle cx="790" cy="452" r="3.5" fill="#4FC3F7" class="drop2"/></g>
+  </g>
+  <g class="g3">
+    <rect x="722" y="240" width="136" height="210" rx="14" fill="none" stroke="#34A853" stroke-width="2"/>
+    <circle cx="840" cy="256" r="8" fill="#34A853"/>
+    <path d="M836,256 l 3,3 l 6,-6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <circle cx="790" cy="274" r="18" fill="#FBBC04"/>
+  <path d="M790,262 L800,268 V280 L790,286 L780,280 V268 Z" fill="#FFFFFF"/>
+  <path d="M780,268 L790,274 L800,268 M790,274 V286" stroke="#FBBC04" stroke-width="1.5" fill="none"/>
+  <text x="790" y="310" text-anchor="middle" font-size="14" class="w b">3 · IaC + Cost</text>
+  <text x="790" y="324" text-anchor="middle" font-size="10" class="m">terraform + price</text>
+  <rect x="730" y="340" width="120" height="20" rx="6" class="chip"/><text x="790" y="354" class="chipT">write infra/*.tf</text>
+  <g class="c31"><rect x="730" y="340" width="120" height="20" rx="6" fill="#4B452B" stroke="#FBBC04"/><text x="790" y="354" class="litT">write infra/*.tf</text></g>
+  <rect x="730" y="366" width="120" height="20" rx="6" class="chip"/><text x="790" y="380" class="chipT">plan · policy check</text>
+  <g class="c32"><rect x="730" y="366" width="120" height="20" rx="6" fill="#4B452B" stroke="#FBBC04"/><text x="790" y="380" class="litT">plan · policy check</text></g>
+  <rect x="730" y="392" width="120" height="20" rx="6" class="chip"/><text x="790" y="406" class="chipT">monthly cost estimate</text>
+  <g class="c33"><rect x="730" y="392" width="120" height="20" rx="6" fill="#4B452B" stroke="#FBBC04"/><text x="790" y="406" class="litT">monthly cost estimate</text></g>
+
+  <!-- gate 3 (go / no-go for terraform apply) -->
+  <line x1="858" y1="345" x2="870" y2="345" class="wire"/>
+  <path d="M883,333 L895,345 L883,357 L871,345 Z" class="card"/>
+  <line x1="896" y1="345" x2="907" y2="345" class="wire" marker-end="url(#arr)"/>
+  <text x="883" y="371" text-anchor="middle" font-size="8.5" class="d">go / no-go</text>
+  <g class="am3"><path d="M883,333 L895,345 L883,357 L871,345 Z" fill="#FBBC04"/></g>
+  <g class="g3">
+    <line x1="858" y1="345" x2="870" y2="345" stroke="#34A853" stroke-width="2"/>
+    <path d="M883,333 L895,345 L883,357 L871,345 Z" fill="#34A853"/>
+    <path d="M878,345 l 3.5,3.5 l 6.5,-6.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="896" y1="345" x2="907" y2="345" stroke="#34A853" stroke-width="2" marker-end="url(#arrG)"/>
+  </g>
+
+  <!-- 4 · Deploy + Audit -->
+  <rect x="908" y="240" width="136" height="210" rx="14" class="card"/>
+  <g class="a4">
+    <rect x="908" y="240" width="136" height="210" rx="14" fill="none" stroke="#EA4335" stroke-width="10" opacity=".18"/>
+    <rect x="908" y="240" width="136" height="210" rx="14" fill="none" stroke="#EA4335" stroke-width="2.5"/>
+    <circle cx="1026" cy="256" r="6" fill="none" stroke="#EA4335" stroke-width="2.5" stroke-dasharray="20 18" stroke-linecap="round">
+      <animateTransform attributeName="transform" type="rotate" from="0 1026 256" to="360 1026 256" dur="1s" repeatCount="indefinite"/>
+    </circle>
+    <g><circle cx="976" cy="452" r="3.5" fill="#4FC3F7" class="drop"/><circle cx="976" cy="452" r="3.5" fill="#4FC3F7" class="drop2"/></g>
+  </g>
+  <g class="g4">
+    <rect x="908" y="240" width="136" height="210" rx="14" fill="none" stroke="#34A853" stroke-width="2"/>
+    <circle cx="1026" cy="256" r="8" fill="#34A853"/>
+    <path d="M1022,256 l 3,3 l 6,-6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <circle cx="976" cy="274" r="18" fill="#EA4335"/>
+  <path d="M976,262 c 6,5 7,14 3,20 h -6 c -4,-6 -3,-15 3,-20 z" fill="#FFFFFF"/>
+  <path d="M973,278 l -4,4 h 4 z M979,278 l 4,4 h -4 z" fill="#FFFFFF"/>
+  <circle cx="976" cy="272" r="2" fill="#EA4335"/>
+  <text x="976" y="310" text-anchor="middle" font-size="14" class="w b">4 · Deploy</text>
+  <text x="976" y="324" text-anchor="middle" font-size="10" class="m">ship + audit + score</text>
+  <rect x="916" y="340" width="120" height="20" rx="6" class="chip"/><text x="976" y="354" class="chipT">Cloud Build image</text>
+  <g class="c41"><rect x="916" y="340" width="120" height="20" rx="6" fill="#482A36" stroke="#EA4335"/><text x="976" y="354" class="litT">Cloud Build image</text></g>
+  <rect x="916" y="366" width="120" height="20" rx="6" class="chip"/><text x="976" y="380" class="chipT">terraform apply</text>
+  <g class="c42"><rect x="916" y="366" width="120" height="20" rx="6" fill="#482A36" stroke="#EA4335"/><text x="976" y="380" class="litT">terraform apply</text></g>
+  <rect x="916" y="392" width="120" height="20" rx="6" class="chip"/><text x="976" y="406" class="chipT">live audit · score</text>
+  <g class="c43"><rect x="916" y="392" width="120" height="20" rx="6" fill="#482A36" stroke="#EA4335"/><text x="976" y="406" class="litT">live audit · score</text></g>
+
+  <!-- output: live app -->
+  <line x1="1044" y1="345" x2="1064" y2="345" class="wire" marker-end="url(#arr)"/>
+  <g class="live"><line x1="1044" y1="345" x2="1064" y2="345" stroke="#34A853" stroke-width="2" marker-end="url(#arrG)"/></g>
+  <rect x="1066" y="240" width="118" height="210" rx="14" class="card"/>
+  <g class="g4">
+    <rect x="1066" y="240" width="118" height="210" rx="14" fill="none" stroke="#34A853" stroke-width="10" opacity=".18"/>
+    <rect x="1066" y="240" width="118" height="210" rx="14" fill="none" stroke="#34A853" stroke-width="2.5"/>
+  </g>
+  <text x="1125" y="268" text-anchor="middle" font-size="14" class="w b">Live app</text>
+  <text x="1125" y="283" text-anchor="middle" font-size="10" class="m">Cloud Run · HTTPS</text>
+  <!-- mini browser -->
+  <rect x="1080" y="296" width="90" height="40" rx="6" fill="#0E1522" stroke="#1F2A40"/>
+  <rect x="1080" y="296" width="90" height="11" rx="6" fill="#1A2336"/>
+  <circle cx="1087" cy="301.5" r="1.8" fill="#EA4335"/><circle cx="1092.5" cy="301.5" r="1.8" fill="#FBBC04"/><circle cx="1098" cy="301.5" r="1.8" fill="#34A853"/>
+  <g class="live">
+    <rect x="1086" y="313" width="52" height="4" rx="2" fill="#4285F4"/>
+    <rect x="1086" y="321" width="78" height="3" rx="1.5" fill="#2A3650"/>
+    <rect x="1086" y="327" width="60" height="3" rx="1.5" fill="#2A3650"/>
+    <circle cx="1162" cy="315" r="3" fill="#34A853"/>
+  </g>
+  <!-- readiness ring -->
+  <circle cx="1125" cy="384" r="26" fill="none" stroke="#1E2A40" stroke-width="6"/>
+  <circle cx="1125" cy="384" r="26" fill="none" stroke="#34A853" stroke-width="6" stroke-linecap="round" class="ring" transform="rotate(-90 1125 384)"/>
+  <g class="sn">
+    <text x="1125" y="390" text-anchor="middle" font-size="18" class="w b">94</text>
+  </g>
+  <text x="1125" y="428" text-anchor="middle" font-size="10" class="m">readiness score</text>
+  <text x="1125" y="441" text-anchor="middle" font-size="9" class="d">security · ops · cost</text>
+
+  <!-- ================= Firestore ================= -->
+  <rect x="350" y="520" width="694" height="42" rx="10" class="card"/>
+  <ellipse cx="372" cy="534" rx="8" ry="3" fill="#FBBC04"/>
+  <path d="M364,534 v 12 c 0,1.7 3.6,3 8,3 s 8,-1.3 8,-3 v -12" fill="#FBBC04" opacity=".85"/>
+  <ellipse cx="372" cy="540" rx="8" ry="3" fill="none" stroke="#0B1220" stroke-width="1"/>
+  <text x="388" y="537" font-size="13" class="w b">Firestore</text>
+  <text x="388" y="552" font-size="10" class="m mono">runs/{id} · events/{seq} · decisions · stages.&lt;stage&gt;.result</text>
+  <text x="1030" y="545" text-anchor="end" font-size="10" class="d">every thought · tool call · result → streamed live</text>
+
+  <!-- SSE back to the dashboard -->
+  <path d="M350,541 H216 V452" class="wire" marker-end="url(#arr)"/>
+  <text x="283" y="556" text-anchor="middle" font-size="9.5" class="d">SSE live stream</text>
+  <g class="any">
+    <circle cx="350" cy="541" r="3.5" fill="#B8AFFF" class="sse"/>
+    <circle cx="350" cy="541" r="3.5" fill="#B8AFFF" class="sse2"/>
+  </g>
+
+  <!-- ================= GitHub ================= -->
+  <rect x="132" y="575" width="212" height="82" rx="12" class="card"/>
+  <circle cx="150" cy="594" r="8" fill="#E6EDF3"/>
+  <path d="M144,588 l -1,-5 l 5,3 z M156,588 l 1,-5 l -5,3 z" fill="#E6EDF3"/>
+  <circle cx="147" cy="594" r="1.4" fill="#0B1220"/><circle cx="153" cy="594" r="1.4" fill="#0B1220"/>
+  <text x="164" y="598" font-size="13" class="w b">GitHub</text>
+  <text x="146" y="613" font-size="9" class="d mono">v2p/run-{id} · one PR per run</text>
+  <g class="p1"><rect x="146" y="621" width="74" height="15" rx="7.5" fill="#34A853" fill-opacity=".18" stroke="#34A853"/><text x="183" y="632" text-anchor="middle" font-size="9.5" fill="#7EE2A0" class="b">PR opened</text></g>
+  <g class="p2"><rect x="224" y="621" width="68" height="15" rx="7.5" fill="#34A853" fill-opacity=".18" stroke="#34A853"/><text x="258" y="632" text-anchor="middle" font-size="9.5" fill="#7EE2A0" class="b">+ DESIGN.md</text></g>
+  <g class="p3"><rect x="146" y="639" width="68" height="15" rx="7.5" fill="#34A853" fill-opacity=".18" stroke="#34A853"/><text x="180" y="650" text-anchor="middle" font-size="9.5" fill="#7EE2A0" class="b">+ infra/*.tf</text></g>
+
+  <!-- ================= caption ================= -->
+  <rect x="447" y="594" width="640" height="36" rx="18" class="card"/>
+  <g class="k0"><text x="767" y="617" text-anchor="middle" font-size="13" class="w">Approver clicks <tspan class="b" fill="#8AB4F8">Start run</tspan> → the dashboard launches the first agent job on Cloud Run</text></g>
+  <g class="k1"><text x="767" y="617" text-anchor="middle" font-size="13" class="w"><tspan class="b" fill="#8AB4F8">Stage 1 · CodeGuard</tspan> — 4 scanners run, Gemini reads every file &amp; fixes it, the PR is opened</text></g>
+  <g class="k2"><text x="767" y="617" text-anchor="middle" font-size="13" class="w"><tspan class="b" fill="#7EE2A0">Stage 2 · Architect</tspan> drafts the GCP design doc; the Critic reviews it, up to 3 rounds</text></g>
+  <g class="k3"><text x="767" y="617" text-anchor="middle" font-size="13" class="w"><tspan class="b" fill="#FDD663">Stage 3 · IaC</tspan> writes Terraform, validates &amp; plans it, prices it from the Billing Catalog</text></g>
+  <g class="k4"><text x="767" y="617" text-anchor="middle" font-size="13" class="w"><tspan class="b" fill="#F28B82">Stage 4 · Deploy</tspan> builds the image, applies Terraform, probes the live app, scores readiness</text></g>
+  <g class="k5"><text x="767" y="617" text-anchor="middle" font-size="13" class="w"><tspan class="b" fill="#7EE2A0">✓ Run succeeded</tspan> — production-ready on Cloud Run · readiness score 94 / 100</text></g>
+
+  <!-- ================= legend ================= -->
+  <g font-size="10" class="d">
+    <circle cx="866" cy="652" r="4" fill="#4285F4"/><text x="875" y="655.5">working</text>
+    <path d="M940,647 l 5,5 l -5,5 l -5,-5 z" fill="#FBBC04"/><text x="950" y="655.5">awaiting approval</text>
+    <circle cx="1052" cy="652" r="5" fill="#34A853"/><path d="M1049.5,652 l 2,2 l 4,-4" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><text x="1061" y="655.5">approved</text>
+    <text x="1184" y="655.5" text-anchor="end" class="mono">loop · 28s</text>
+  </g>
+</svg>

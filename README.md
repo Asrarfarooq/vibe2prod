@@ -2,6 +2,8 @@
 
 Vibe2Prod takes a vibe-coded web app (the kind AI Studio generates: Express + Vite React, calling Gemini) from a GitHub repo and prepares it for production on Google Cloud. Four ADK agents run in sequence: CodeGuard fixes security problems in the code, Architect writes a design doc, IaC writes Terraform with a cost estimate, and Deploy builds and deploys the app and scores production readiness. A person approves or denies each stage in a dashboard before the next one starts. Built for GCC VibeLift 2026.
 
+![Animated walkthrough of a Vibe2Prod run: an approver starts a run from the dashboard; CodeGuard, Architect + Critic, IaC + Cost and Deploy + Audit each light up in turn, calling Gemini on Vertex AI and streaming events to Firestore, with a human approval gate between stages; the run ends with a production-ready app on Cloud Run and a readiness score](docs/how-it-works.svg)
+
 ## Status
 
 | Component | State |
