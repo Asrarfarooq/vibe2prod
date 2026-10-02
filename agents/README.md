@@ -40,7 +40,7 @@ agents/
 | `events.py` | `Emitter` writes events to `runs/{id}/events/{seq:08d}` (kinds: `status`, `thought`, `tool_call`, `tool_result`, `output`, `error`; text clipped to 4000 chars, data to 8000). `FirestoreEventsPlugin` emits every non-partial model event |
 | `guardrails.py` | `safe_path()` rejects paths outside the app folder or inside `.git`/`.github`. `GuardrailPlugin` blocks tools not in the stage allowlist and tool calls whose `path` argument fails `safe_path()`. When a tool raises, it returns the error to the model as a tool result and logs an `error` event instead of aborting the workflow |
 | `model.py` | `gemini()`: model from `MODEL` (default `gemini-3.8-flash`) with HTTP retries (5 attempts). `thinking()`: planner with thoughts included, level HIGH |
-| `repo.py` | `github_token()` reads secret `github-agent-token` from Secret Manager as the job's own identity (mTLS on Cloud Run). `Repo` clones, continues the run branch if an earlier stage pushed it, commits as `Vibe2Prod`, pushes, and opens or finds the run PR. The token is passed per git command and never written to disk |
+| `repo.py` | `GitHubApp` reads the `vibe2prod-agent` GitHub App private key (secret `github-app-private-key`) as the job's own identity (mTLS on Cloud Run) and mints a one-hour installation token scoped to the run's repo, re-minted after 45 minutes. `Repo` clones, continues the run branch if an earlier stage pushed it, commits as `vibe2prod-agent[bot]`, pushes, and opens or finds the run PR. The token is passed per git command and never written to disk |
 | `stage.py` | `run_workflow()` runs the workflow headless with an LLM call cap and a timeout. `set_stage()` writes status, summary, artifacts and `result` to `runs/{id}.stages.<stage>`. `guarded()` marks the stage `failed` on any exception |
 
 ## Agents
@@ -114,12 +114,13 @@ Limits: `MAX_LLM_CALLS` 500, `STAGE_TIMEOUT_S` 7200. Overrides: `TF_STATE_BUCKET
 | `GOOGLE_GENAI_USE_ENTERPRISE` | google-genai | set to `TRUE` (Vertex AI) |
 | `MODEL` | `common/model.py` | `gemini-3.8-flash` |
 | `WORKDIR` | `common/context.py` | `/tmp/work` |
-| `GITHUB_TOKEN_SECRET` | `common/repo.py` | `github-agent-token` |
+| `GITHUB_APP_CLIENT_ID` | `common/repo.py` | `Iv23li6wJsHm9yHUg14w` (the `vibe2prod-agent` app) |
+| `GITHUB_APP_KEY_SECRET` | `common/repo.py` | `github-app-private-key` |
 | `MAX_LLM_CALLS`, `STAGE_TIMEOUT_S` | stage agents | per agent, see above |
 
 ## Run a stage locally
 
-A local run uses real services: it reads and writes the run doc and events in Firestore, reads `github-agent-token`, and pushes to the run branch on GitHub. IaC and Deploy also use the Terraform state bucket; Deploy runs Cloud Build and creates real resources. Your user account needs the matching permissions, and `runs/<run_id>` must exist with the earlier stages' `result` fields.
+A local run uses real services: it reads and writes the run doc and events in Firestore, reads `github-app-private-key`, and pushes to the run branch on GitHub. IaC and Deploy also use the Terraform state bucket; Deploy runs Cloud Build and creates real resources. Your user account needs the matching permissions, and `runs/<run_id>` must exist with the earlier stages' `result` fields.
 
 ```
 gcloud auth application-default login
@@ -160,7 +161,7 @@ gcloud beta run jobs deploy <stage>-agent \
   --identity-type=agent-identity \
   --service-account=vibe2prod-agent-runtime@$PROJECT_ID.iam.gserviceaccount.com \
   --set-env-vars=AGENT=<folder>,STAGE=<stage>,GOOGLE_GENAI_USE_ENTERPRISE=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global \
-  --cpu=2 --memory=4Gi --max-retries=0 --task-timeout=40m
+  --cpu=2 --memory=4Gi --max-retries=0 --task-timeout=130m
 ```
 
-Steps exist for `hello-agent`, `codeguard-agent`, `architect-agent`, `iac-agent` and `deploy-agent`. `--functional-type=agent --identity-type=agent-identity` gives the job its own Agent Identity and registers it in Agent Registry; these settings cannot be changed after the job is created. IAM is granted per job identity: each new job needs its own `secretAccessor` binding on `github-agent-token`, plus whatever else its stage touches.
+Steps exist for `hello-agent`, `codeguard-agent`, `architect-agent`, `iac-agent` and `deploy-agent`. `--functional-type=agent --identity-type=agent-identity` gives the job its own Agent Identity and registers it in Agent Registry; these settings cannot be changed after the job is created. IAM is granted per job identity: each new job needs its own `secretAccessor` binding on `github-app-private-key`, plus whatever else its stage touches.

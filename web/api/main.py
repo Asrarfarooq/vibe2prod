@@ -123,6 +123,9 @@ def serialize_run(run_id: str, doc: dict) -> dict:
         "updated_at": iso(doc.get("updated_at")),
         "stages": stages,
         "score": doc.get("score"),
+        "scorecard": {**card, "generated_at": iso(card.get("generated_at"))}
+        if (card := doc.get("scorecard"))
+        else None,
     }
 
 
@@ -571,6 +574,7 @@ async def rerun(
             "current_stage": stage,
             "updated_at": now,
             "score": None,
+            "scorecard": None,
             f"stages.{stage}": {
                 "status": "running",
                 "started_at": now,

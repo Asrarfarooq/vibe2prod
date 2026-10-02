@@ -8,7 +8,7 @@ from common.events import Emitter, FirestoreEventsPlugin
 from common.guardrails import GuardrailPlugin, safe_path
 from common.model import gemini, thinking
 from common.npm import latest_version
-from common.repo import Repo, github_token
+from common.repo import Repo
 from common.stage import env_int, guarded, run_workflow, set_stage
 from google.adk import Agent, Event, Workflow
 from pydantic import BaseModel, Field
@@ -341,7 +341,7 @@ async def main() -> int:
     emitter = Emitter(client, run)
 
     async def body():
-        repo = Repo(run, github_token(run.project))
+        repo = Repo(run)
         fix_budget_s = env_int("STAGE_TIMEOUT_S", 7200) - WRAP_UP_S
         workflow, tool_names, wrap_up = build(run, client, emitter, repo, fix_budget_s)
         plugins = [

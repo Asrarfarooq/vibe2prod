@@ -109,7 +109,7 @@ The dashboard starts jobs named `<stage>-agent`.
 | CI/CD | Developer Connect connection `vibe2prod-github`; Cloud Build trigger `vibe2prod-main-push` runs `cloudbuild.yaml` on push to `main` as `vibe2prod-build@` |
 | Agent jobs | Deployed with `gcloud beta run jobs deploy --functional-type=agent --identity-type=agent-identity`, so each job gets its own Agent Identity and is registered in Agent Registry. Service account `vibe2prod-agent-runtime` |
 | App image builds | Deploy stage submits Cloud Build jobs as `vibe2prod-app-build@`, with source in `gs://vibe2prod-509620_cloudbuild` |
-| GitHub token | Secret Manager `github-agent-token` (fine-grained, repo-scoped). Read at runtime by each agent job's own identity; never written to disk |
+| GitHub access | GitHub App `vibe2prod-agent` (Contents and Pull requests read/write), installed on this repo only. Its private key is in Secret Manager `github-app-private-key`, read at runtime by each agent job's own identity; agents mint one-hour repo-scoped tokens and commit as `vibe2prod-agent[bot]` |
 | Dashboard identity | Service account `vibe2prod-dashboard` |
 | Terraform state | `gs://vibe2prod-509620-tfstate`, prefix `apps/<run_id>` |
 | Deployed apps | Every resource named `app-<run_id>` (bucket `app-<run_id>-<project>`), labeled `v2p-run=<run_id>`, in the same project. Own Firestore database per app. Every app runs as the shared service account `vibe2prod-app-runtime` (has `aiplatform.user`; the deploy agent may act only as this account) |

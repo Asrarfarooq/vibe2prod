@@ -393,6 +393,20 @@ function run2(): Run {
         { name: "Deploy health", value: 76, note: "10 of 12 smoke checks passed; uploads over 5 MB return 413." },
       ],
     },
+    scorecard: {
+      rows: [
+        { category: "Security findings", before: "14", after: "2", delta: "-12 (-86%)", improved: true },
+        { category: "Hardcoded secret findings", before: "3", after: "0; 2 in Secret Manager", delta: "-3 (-100%)", improved: true },
+        { category: "Dependency vulnerabilities", before: "2", after: "0", delta: "-2 (-100%)", improved: true },
+        { category: "Container", before: "node:20, runs as root", after: "node:24-slim, runs as non-root user node", delta: "Non-root", improved: true },
+        { category: "Cloud architecture", before: "No cloud resources defined", after: "Cloud Run, Firestore, Secret Manager, Cloud Storage", delta: "+4 services", improved: true },
+        { category: "Infrastructure as code", before: "None", after: "11 Terraform resources, remote state in GCS", delta: "+11 resources", improved: true },
+        { category: "Monthly cost", before: "Not estimated", after: "$23.84/month estimated", delta: "Estimated", improved: true },
+        { category: "Readiness score", before: "Not scored", after: "71/100 (10/12 checks passed)", delta: "First audit", improved: true },
+      ],
+      agent_minutes: 23,
+      generated_at: a(1830),
+    },
   };
 }
 

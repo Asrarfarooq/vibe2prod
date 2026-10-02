@@ -9,6 +9,7 @@ import { DecisionPanel } from "../components/DecisionPanel";
 import { RerunPanel } from "../components/RerunPanel";
 import { ArtifactList } from "../components/Artifacts";
 import { Readiness } from "../components/Readiness";
+import { Scorecard } from "../components/Scorecard";
 import { ExternalGlyph, StatusIcon } from "../components/Icons";
 import { absolute, clock, elapsedClock, shortSha } from "../lib/format";
 import { decisionTarget } from "../lib/stages";
@@ -54,6 +55,7 @@ export function RunPage({ projectId, id }: { projectId: string; id: string }) {
   const [projectName, setProjectName] = useState<string | null>(null);
   const [selected, setSelected] = useState<StageKey | null>(null);
   const [tab, setTab] = useState<Tab>("activity");
+  const [view, setView] = useState<"summary" | "pipeline">("summary");
   const picked = useRef(false);
   const live = run?.status === "running" || run?.status === "awaiting_approval";
   const now = useNow(!!live || !!run?.stages.some((x) => x.status === "running"));
@@ -212,48 +214,72 @@ export function RunPage({ projectId, id }: { projectId: string; id: string }) {
           </div>
         )}
 
-        <PipelineStepper stages={run.stages} selected={stage.key} onSelect={select} now={now} />
+        {run.scorecard && (
+          <div className={s.views} role="tablist" aria-label="Run views">
+            {(["summary", "pipeline"] as const).map((v) => (
+              <button
+                key={v}
+                id={`view-${v}`}
+                type="button"
+                role="tab"
+                className={s.view}
+                aria-selected={view === v}
+                onClick={() => setView(v)}
+              >
+                {v === "summary" ? "Summary" : "Pipeline"}
+              </button>
+            ))}
+          </div>
+        )}
 
-        <div className={s.grid}>
-          <StageDetail
-            key={`${stage.key}-${stage.attempt}`}
-            stage={stage}
-            index={stageIdx}
-            events={events}
-            history={attempts.filter((a) => a.key === stage.key)}
-            tab={tab}
-            onTab={setTab}
-          />
-          <aside className={s.rail} aria-label="Decision, artifacts and readiness">
-            {failedIdx >= 0 && (
-              <RerunPanel
-                key={`${run.stages[failedIdx].key}-${run.stages[failedIdx].attempt}`}
-                runId={run.id}
-                stages={run.stages}
-                failedIndex={failedIdx}
-                onSent={replaceRun}
-                onConflict={refetch}
+        {run.scorecard && view === "summary" ? (
+          <Scorecard card={run.scorecard} deployName={deploy?.name ?? "Deploy + Audit"} />
+        ) : (
+          <>
+            <PipelineStepper stages={run.stages} selected={stage.key} onSelect={select} now={now} />
+
+            <div className={s.grid}>
+              <StageDetail
+                key={`${stage.key}-${stage.attempt}`}
+                stage={stage}
+                index={stageIdx}
+                events={events}
+                history={attempts.filter((a) => a.key === stage.key)}
+                tab={tab}
+                onTab={setTab}
               />
-            )}
-            {(failedIdx < 0 || target.stage.decision) && (
-              <DecisionPanel
-                key={target.stage.key}
-                runId={run.id}
-                stage={target.stage}
-                index={target.index}
-                onDecided={replaceRun}
-                onConflict={refetch}
-              />
-            )}
-            <section className={s.railSection} aria-labelledby="artifacts-heading">
-              <h2 id="artifacts-heading" className={s.railLabel}>
-                Artifacts
-              </h2>
-              <ArtifactList stages={run.stages} onOpen={openArtifacts} />
-            </section>
-            <Readiness score={run.score} deployName={deploy?.name ?? "Deploy + Audit"} />
-          </aside>
-        </div>
+              <aside className={s.rail} aria-label="Decision, artifacts and readiness">
+                {failedIdx >= 0 && (
+                  <RerunPanel
+                    key={`${run.stages[failedIdx].key}-${run.stages[failedIdx].attempt}`}
+                    runId={run.id}
+                    stages={run.stages}
+                    failedIndex={failedIdx}
+                    onSent={replaceRun}
+                    onConflict={refetch}
+                  />
+                )}
+                {(failedIdx < 0 || target.stage.decision) && (
+                  <DecisionPanel
+                    key={target.stage.key}
+                    runId={run.id}
+                    stage={target.stage}
+                    index={target.index}
+                    onDecided={replaceRun}
+                    onConflict={refetch}
+                  />
+                )}
+                <section className={s.railSection} aria-labelledby="artifacts-heading">
+                  <h2 id="artifacts-heading" className={s.railLabel}>
+                    Artifacts
+                  </h2>
+                  <ArtifactList stages={run.stages} onOpen={openArtifacts} />
+                </section>
+                <Readiness score={run.score} deployName={deploy?.name ?? "Deploy + Audit"} />
+              </aside>
+            </div>
+          </>
+        )}
       </main>
     </>
   );

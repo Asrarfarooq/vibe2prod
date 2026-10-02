@@ -145,6 +145,38 @@
   }
 }
 
+.views {
+  display: flex;
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.view {
+  position: relative;
+  padding: var(--space-1) 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: var(--fs-body);
+  transition: color var(--dur-hover) var(--ease);
+}
+
+.view:hover,
+.view[aria-selected="true"] {
+  color: var(--text);
+}
+
+.view[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--text);
+}
+
 .grid {
   flex: 1 1 auto;
   min-height: 0;

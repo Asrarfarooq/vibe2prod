@@ -92,6 +92,20 @@ export interface Score {
   categories: ScoreCategory[];
 }
 
+export interface ScorecardRow {
+  category: string;
+  before: string;
+  after: string;
+  delta: string;
+  improved: boolean;
+}
+
+export interface Scorecard {
+  rows: ScorecardRow[];
+  agent_minutes: number | null;
+  generated_at: string | null;
+}
+
 export interface Run {
   id: string;
   number: number;
@@ -104,6 +118,7 @@ export interface Run {
   updated_at: string;
   stages: Stage[];
   score: Score | null;
+  scorecard?: Scorecard | null;
 }
 
 export interface RunSummary {

@@ -5,16 +5,17 @@ import time
 from datetime import datetime, timezone
 from typing import Literal
 
+import requests
 from common import context
 from common.events import Emitter, FirestoreEventsPlugin
 from common.guardrails import GuardrailPlugin
 from common.model import gemini, thinking
-from common.repo import Repo, github_token
+from common.repo import Repo
 from common.stage import env_int, guarded, run_workflow, set_stage
 from google.adk import Agent, Event, Workflow
 from pydantic import BaseModel, Field
 
-from . import audit, gate, probe, terraform
+from . import audit, gate, probe, scorecard, terraform
 from .gcp import AR_REPO, BUILD_DONE, REGION, Gcp, rfc3339
 
 AUTHOR = "deploy"
@@ -295,16 +296,41 @@ def build(
             },
         ]
         now = datetime.now(timezone.utc)
+        before, after = await asyncio.gather(
+            asyncio.to_thread(
+                scorecard.repo_facts, run.workdir, run.commit, run.app_path
+            ),
+            asyncio.to_thread(scorecard.repo_facts, run.workdir, "HEAD", run.app_path),
+        )
+        card = scorecard.build(run_doc, public_checks, score, before, after, now)
         await (
             client.collection("runs")
             .document(run.run_id)
-            .update({"score": score, "app.url": service_url})
+            .update({"score": score, "app.url": service_url, "scorecard": card})
         )
         if run_doc.get("project_id"):
             await (
                 client.collection("projects")
                 .document(run_doc["project_id"])
                 .update({"app_url": service_url, "updated_at": now})
+            )
+        try:
+            pr = await asyncio.to_thread(repo.find_pr)
+            if pr:
+                await asyncio.to_thread(
+                    repo.set_pr_section,
+                    pr["number"],
+                    scorecard.MARKER,
+                    scorecard.markdown(card),
+                )
+                await emitter.safe_emit(
+                    "output",
+                    AUTHOR,
+                    f"Added the before/after scorecard to PR #{pr['number']}",
+                )
+        except (requests.RequestException, RuntimeError) as err:
+            await emitter.safe_emit(
+                "status", AUTHOR, f"Could not update the PR scorecard: {err}"[:300]
             )
         result = {
             "service_url": service_url,
@@ -350,7 +376,7 @@ async def main() -> int:
 
     async def body():
         snapshot = await client.collection("runs").document(run.run_id).get()
-        repo = Repo(run, github_token(run.project))
+        repo = Repo(run)
         gcp = Gcp(run.project)
         workflow = build(run, client, emitter, repo, gcp, snapshot.to_dict())
         plugins = [

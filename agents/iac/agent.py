@@ -10,7 +10,7 @@ from common.events import Emitter, FirestoreEventsPlugin
 from common.guardrails import GuardrailPlugin, PathNotAllowed, safe_path
 from common.model import gemini, thinking
 from common.npm import latest_version
-from common.repo import Repo, github_token
+from common.repo import Repo
 from common.stage import env_int, guarded, run_workflow, set_stage
 from google.adk import Agent, Event, Workflow
 from pydantic import BaseModel, Field
@@ -530,7 +530,7 @@ async def main() -> int:
     emitter = Emitter(client, run)
 
     async def body():
-        repo = Repo(run, github_token(run.project))
+        repo = Repo(run)
         workflow, tool_names = build(run, client, emitter, repo)
         plugins = [
             GuardrailPlugin(tool_names, run.app_dir, emitter),
