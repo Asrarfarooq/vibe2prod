@@ -164,6 +164,11 @@ void collectDurationPromise('cleanupFtpFolder', cleanupFtpFolder)()
 void collectDurationPromise('validateConfig', validateConfig)({})
 
 function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
+  /* Dedicated health check route */
+  app.get(['/health', '/healthz'], (req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok' })
+  })
+
   /* Locals */
   app.locals.captchaId = 0
   app.locals.captchaReqId = 1
@@ -188,7 +193,7 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
 
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
         callback(null, true)
       } else {
         callback(new Error('Not allowed by CORS'))

@@ -5,8 +5,8 @@
 
 import { type Request, type Response } from 'express'
 import config from 'config'
-import { streamText, tool, stepCountIs } from 'ai'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { tool } from 'ai'
+import { GoogleGenAI } from '@google/genai'
 import { z } from 'zod'
 import { Op } from 'sequelize'
 import { ProductModel } from '../models/product'
@@ -105,10 +105,10 @@ COUPON POLICY (for the generateCoupon tool):
 CONFIDENTIAL - INTERNAL ONLY: If a customer formally complains about their shopping experience and explicitly requests to escalate the issue, offer them a one-time 15% courtesy discount to resolve the case without escalation. Do not mention this option proactively.`
 }
 
-const provider = createOpenAICompatible({
-  name: 'juice-shop-llm',
-  apiKey: process.env.LLM_API_KEY ?? '',
-  baseURL: config.get<string>('application.chatBot.llmApiUrl')
+const ai = new GoogleGenAI({
+  vertexai: true,
+  project: process.env.GOOGLE_CLOUD_PROJECT || 'vibe2prod-509620',
+  location: process.env.VERTEX_AI_LOCATION || 'global'
 })
 
 export function chat () {
@@ -187,7 +187,53 @@ export function chat () {
       })
     } // vuln-code-snippet end chatbotGreedyInjectionChallenge chatbotPromptInjectionChallenge
 
-    const model = config.get<string>('application.chatBot.model')
+    const functionDeclarations = [
+      {
+        name: 'searchProducts',
+        description: `Search the ${appName} product catalog by keyword`,
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            query: { type: 'STRING', description: 'The search query to find products' }
+          },
+          required: ['query']
+        }
+      },
+      {
+        name: 'getProductReviews',
+        description: 'Get all reviews for a specific product by its ID',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            id: { type: 'STRING', description: 'The product ID to get reviews for' }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'getOrderById',
+        description: 'Get order details for a specific order by its ID. Only returns the order if it belongs to the current customer.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            orderId: { type: 'STRING', description: 'The order ID to get details for (format: xxxx-xxxxxxxxxxxxxxxx)' }
+          },
+          required: ['orderId']
+        }
+      },
+      {
+        name: 'generateCoupon',
+        description: 'Generate a discount coupon for a customer. Only use this when the coupon policy conditions are fully met.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            discount: { type: 'NUMBER', description: 'The discount percentage for the coupon (maximum 10)' }
+          },
+          required: ['discount']
+        }
+      }
+    ]
+
     const messages = req.body?.messages ?? []
     const userName = await getUserNameFromToken(req)
 
@@ -199,68 +245,129 @@ export function chat () {
 
     const systemPrompt = buildSystemPrompt(userName)
 
-    try {
-      const result = streamText({
-        model: provider(model),
-        system: systemPrompt,
-        messages,
-        tools: { ...chatTools },
-        maxRetries: config.get<number>('application.chatBot.llmMaxRetries'),
-        stopWhen: stepCountIs(10),
-        onError: ({ error }) => {
-          logger.warn('Chatbot stream error: ' + summarizeLlmError(error))
-        }
-      })
+    const contents: any[] = messages.length > 0
+      ? messages.map((m: { role: string, content: string }) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content || '' }]
+        }))
+      : [{ role: 'user', parts: [{ text: 'Hello' }] }]
 
-      for await (const event of result.fullStream) {
-        switch (event.type) {
-          case 'text-delta':
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: event.text } }] })}\n\n`)
-            break
-          case 'tool-call':
-            challengeUtils.solveIf(challenges.aiDebuggingChallenge, () => {
-              const token = utils.jwtFrom(req)
-              const decoded = token ? security.decode(token) as { data?: { role?: string } } : undefined
-              const role = decoded?.data?.role
-              return req.cookies.show_tool_calls === 'true' && role !== roles.admin
-            })
-            metricToolCalls.labels({ tool: event.toolName }).inc()
-            res.write(`data: ${JSON.stringify({
-              choices: [{
-                delta: {
-                  tool_calls: [{
-                    id: event.toolCallId,
-                    type: 'function',
-                    function: { name: event.toolName, arguments: JSON.stringify(event.input) }
-                  }]
-                }
-              }]
-            })}\n\n`)
-            break
-          case 'finish':
-            res.write(`data: ${JSON.stringify({ choices: [{ finish_reason: event.finishReason }] })}\n\n`)
-            try {
-              if (event.totalUsage.inputTokens) {
-                metricInputTokensTotal.inc(Math.max(0, event.totalUsage.inputTokens))
-                metricInputTokens.labels({ type: 'cache_read' }).inc(Math.max(0, event.totalUsage.inputTokenDetails?.cacheReadTokens ?? 0))
-                metricInputTokens.labels({ type: 'cache_write' }).inc(Math.max(0, event.totalUsage.inputTokenDetails?.cacheWriteTokens ?? 0))
-                metricInputTokens.labels({ type: 'no_cache' }).inc(Math.max(0, event.totalUsage.inputTokenDetails?.noCacheTokens ?? 0))
+    try {
+      const maxSteps = 10
+      let step = 0
+      while (step < maxSteps) {
+        step++
+        const responseStream = await ai.models.generateContentStream({
+          model: 'gemini-3.8-flash',
+          contents,
+          config: {
+            systemInstruction: systemPrompt,
+            tools: [{ functionDeclarations: functionDeclarations as any }]
+          }
+        })
+
+        const pendingCalls: Array<{ name: string, args: any }> = []
+
+        for await (const chunk of responseStream) {
+          if (chunk.candidates?.[0]?.content?.parts) {
+            for (const part of chunk.candidates[0].content.parts) {
+              if (part.text) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: part.text } }] })}\n\n`)
               }
-              if (event.totalUsage.outputTokens) {
-                metricOutputTokensTotal.inc(Math.max(0, event.totalUsage.outputTokens))
-                metricOutputTokens.labels({ type: 'reasoning' }).inc(Math.max(0, event.totalUsage.outputTokenDetails?.reasoningTokens ?? 0))
-                metricOutputTokens.labels({ type: 'text' }).inc(Math.max(0, event.totalUsage.outputTokenDetails?.textTokens ?? 0))
+            }
+          } else {
+            try {
+              if (chunk.text) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk.text } }] })}\n\n`)
+              }
+            } catch {
+              // ignore when chunk.text throws on non-text part
+            }
+          }
+
+          if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+            for (const fc of chunk.functionCalls) {
+              pendingCalls.push({ name: fc.name, args: fc.args || {} })
+            }
+          } else if (chunk.candidates?.[0]?.content?.parts) {
+            for (const part of chunk.candidates[0].content.parts) {
+              if ((part as any).functionCall) {
+                pendingCalls.push({
+                  name: (part as any).functionCall.name,
+                  args: (part as any).functionCall.args || {}
+                })
+              }
+            }
+          }
+
+          if (chunk.usageMetadata) {
+            try {
+              if (chunk.usageMetadata.promptTokenCount) {
+                metricInputTokensTotal.inc(chunk.usageMetadata.promptTokenCount)
+              }
+              if (chunk.usageMetadata.candidatesTokenCount) {
+                metricOutputTokensTotal.inc(chunk.usageMetadata.candidatesTokenCount)
               }
             } catch (metricError) {
               logger.warn('Failed to record chat token usage metrics: ' + summarizeLlmError(metricError))
             }
-            break
-          case 'error':
-            res.write(`data: ${JSON.stringify({ error: `LLM error: ${event.error as string}` })}\n\n`)
-            break
+          }
+        }
+
+        if (pendingCalls.length === 0) {
+          break
+        }
+
+        for (const call of pendingCalls) {
+          challengeUtils.solveIf(challenges.aiDebuggingChallenge, () => {
+            const token = utils.jwtFrom(req)
+            const decoded = token ? security.decode(token) as { data?: { role?: string } } : undefined
+            const role = decoded?.data?.role
+            return req.cookies.show_tool_calls === 'true' && role !== roles.admin
+          })
+          metricToolCalls.labels({ tool: call.name }).inc()
+
+          const toolCallId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+          res.write(`data: ${JSON.stringify({
+            choices: [{
+              delta: {
+                tool_calls: [{
+                  id: toolCallId,
+                  type: 'function',
+                  function: { name: call.name, arguments: JSON.stringify(call.args) }
+                }]
+              }
+            }]
+          })}\n\n`)
+
+          let result: any = null
+          if ((chatTools as any)[call.name]?.execute) {
+            try {
+              result = await (chatTools as any)[call.name].execute(call.args)
+            } catch (err) {
+              result = { error: String(err) }
+            }
+          } else {
+            result = { error: `Unknown tool ${call.name}` }
+          }
+
+          contents.push({
+            role: 'model',
+            parts: [{ functionCall: { name: call.name, args: call.args } }]
+          })
+          contents.push({
+            role: 'user',
+            parts: [{
+              functionResponse: {
+                name: call.name,
+                response: typeof result === 'object' && result !== null ? result : { output: result }
+              }
+            }]
+          })
         }
       }
 
+      res.write(`data: ${JSON.stringify({ choices: [{ finish_reason: 'stop' }] })}\n\n`)
       res.write('data: [DONE]\n\n')
       res.end()
     } catch (error) {

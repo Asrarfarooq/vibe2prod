@@ -75,31 +75,40 @@ const validatePreconditions = async ({ exitOnFailure = true } = {}) => {
     logger.info(`Check ${colors.bold('https://howto-web3.owasp-juice.shop')} for instructions on how to set up and configure the Alchemy API`)
   }
   const llmApiUrl = config.get<string>('application.chatBot.llmApiUrl')
-  const llmApiReachable = await checkIfDomainReachable(llmApiUrl)
+  const isProdOrGcp = process.env.NODE_ENV === 'production' || Boolean(process.env.GOOGLE_CLOUD_PROJECT) || Boolean(process.env.K_SERVICE)
+  const skipLlmProbe = isProdOrGcp && isOllamaUrl(llmApiUrl)
+  let llmApiReachable = false
   let llmApiKeyEnvVarExists = true
   let llmModelAvailable = true
-  preconditionResults[llmApiUrl] = llmApiReachable
-  if (llmApiReachable) {
-    const llmModel = config.get<string>('application.chatBot.model')
-    llmModelAvailable = await checkIfLlmModelAvailable(llmApiUrl)
-    variableDependencies[llmModel] = {
-      dependency: 'LLM Model',
-      documentation: 'https://howto-llm.owasp-juice.shop',
-      dependentChallenges: ['"Chatbot Prompt Injection" challenge', '"Greedy Chatbot Manipulation" challenge', '"AI Debugging" challenge', '"System Prompt Extraction" challenge']
-    }
-    preconditionResults[llmModel] = llmModelAvailable
-    if (!isOllamaUrl(llmApiUrl)) {
-      variableDependencies.LLM_API_KEY = {
-        dependency: 'LLM API Key',
+
+  if (skipLlmProbe) {
+    logger.info(`Bypassing local LLM probe for ${colors.bold(llmApiUrl)} in production/Google Cloud environment (${colors.green('SKIPPED')})`)
+    preconditionResults[llmApiUrl] = true
+  } else {
+    llmApiReachable = await checkIfDomainReachable(llmApiUrl)
+    preconditionResults[llmApiUrl] = llmApiReachable
+    if (llmApiReachable) {
+      const llmModel = config.get<string>('application.chatBot.model')
+      llmModelAvailable = await checkIfLlmModelAvailable(llmApiUrl)
+      variableDependencies[llmModel] = {
+        dependency: 'LLM Model',
         documentation: 'https://howto-llm.owasp-juice.shop',
         dependentChallenges: ['"Chatbot Prompt Injection" challenge', '"Greedy Chatbot Manipulation" challenge', '"AI Debugging" challenge', '"System Prompt Extraction" challenge']
       }
-      llmApiKeyEnvVarExists = checkIfEnvironmentVariableExists('LLM_API_KEY')
-      preconditionResults.LLM_API_KEY = llmApiKeyEnvVarExists
+      preconditionResults[llmModel] = llmModelAvailable
+      if (!isOllamaUrl(llmApiUrl)) {
+        variableDependencies.LLM_API_KEY = {
+          dependency: 'LLM API Key',
+          documentation: 'https://howto-llm.owasp-juice.shop',
+          dependentChallenges: ['"Chatbot Prompt Injection" challenge', '"Greedy Chatbot Manipulation" challenge', '"AI Debugging" challenge', '"System Prompt Extraction" challenge']
+        }
+        llmApiKeyEnvVarExists = checkIfEnvironmentVariableExists('LLM_API_KEY')
+        preconditionResults.LLM_API_KEY = llmApiKeyEnvVarExists
+      }
     }
-  }
-  if (!llmApiReachable || !llmApiKeyEnvVarExists || !llmModelAvailable) {
-    logger.info(`Check ${colors.bold('https://howto-llm.owasp-juice.shop')} for instructions on how to set up and configure the LLM API`)
+    if (!llmApiReachable || !llmApiKeyEnvVarExists || !llmModelAvailable) {
+      logger.info(`Check ${colors.bold('https://howto-llm.owasp-juice.shop')} for instructions on how to set up and configure the LLM API`)
+    }
   }
 
   resolvePreconditionsReady()
