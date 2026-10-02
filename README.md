@@ -2,6 +2,8 @@
 
 Vibe2Prod takes a vibe-coded web app (the kind AI Studio generates: Express + Vite React, calling Gemini) from a GitHub repo and prepares it for production on Google Cloud. Four ADK agents run in sequence: CodeGuard fixes security problems in the code, Architect writes a design doc, IaC writes Terraform with a cost estimate, and Deploy builds and deploys the app and scores production readiness. A person approves or denies each stage in a dashboard before the next one starts. Built for GCC VibeLift 2026.
 
+![Animated walkthrough of a Vibe2Prod run: an approver starts a run from the dashboard; CodeGuard, Architect + Critic, IaC + Cost and Deploy + Audit each light up in turn, calling Gemini on Vertex AI and streaming events to Firestore, with a human approval gate between stages; the run ends with a production-ready app on Cloud Run and a readiness score](docs/how-it-works.svg)
+
 ## Status
 
 | Component | State |
@@ -29,6 +31,13 @@ Handoff between stages:
 - Git: all stages work on the branch `v2p/run-<run_id>` in the app repo. CodeGuard creates it and opens the single PR for the run. Architect commits `<app>/docs/DESIGN.md`, IaC commits `<app>/infra/*.tf` (and app code changes the design requires). Deploy pushes nothing. The PR collects every change.
 - Firestore: each stage stores structured output in `runs/{id}.stages.<stage>.result`. Architect's result (resources, IAM, secrets, env vars, usage assumptions) is IaC's input; IaC's result (backend, image variable, plan summary, cost) is Deploy's input.
 
+## Architecture
+
+![Vibe2Prod architecture: GitHub and an approver feed the Cloud Run dashboard, which starts four ADK agent jobs (CodeGuard, Architect + Critic, IaC + Cost, Deploy + Audit) with a human approval gate between each; agents call Gemini on Vertex AI, stream events to Firestore, and use Secret Manager, Artifact Registry, Cloud Build and Cloud Storage; the output is a production-ready app on Cloud Run with a readiness score](docs/architecture.jpg)
+
+<details>
+<summary>Run sequence (detailed)</summary>
+
 ```mermaid
 sequenceDiagram
     participant U as Approver
@@ -46,6 +55,8 @@ sequenceDiagram
     D->>F: decision
     D->>J: run next <stage>-agent
 ```
+
+</details>
 
 ## Directory structure
 
