@@ -3,21 +3,30 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import multer from "multer";
 import path from "path";
-import fs from "fs";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import helmet from "helmet";
 import validator from "validator";
 import AdmZip from "adm-zip";
 import { GoogleGenAI } from "@google/genai";
+import { Firestore } from "@google-cloud/firestore";
+import { Storage } from "@google-cloud/storage";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-const uploadsDir = path.resolve(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+const firestore = new Firestore({
+  projectId: process.env.GOOGLE_CLOUD_PROJECT || "vibe2prod-509620",
+  databaseId: process.env.FIRESTORE_DATABASE_ID || "app-vibed-app-5",
+});
+const notesCollection = firestore.collection("notes");
+
+const storageClient = new Storage({
+  projectId: process.env.GOOGLE_CLOUD_PROJECT || "vibe2prod-509620",
+});
+const bucket = storageClient.bucket(
+  process.env.GCS_BUCKET_NAME || "app-vibed-app-5-vibe2prod-509620"
+);
 
 function isSafeFilename(str) {
   if (typeof str !== "string" || str.length === 0 || str.length > 64) {
@@ -53,101 +62,97 @@ function isSafePathSegment(str) {
   return !str.includes("..");
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const unique = crypto.randomBytes(16).toString("hex");
-    const ext = path.extname(file.originalname).slice(0, 10).replace(/[^a-zA-Z0-9.]/g, "");
-    cb(null, `${unique}${ext}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
-
 app.disable("x-powered-by");
 app.use(helmet());
-
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : ["http://localhost:3000", "http://localhost:5173"];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  })
-);
+app.use(cors());
 
 app.use(bodyParser.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "dist")));
 
-let notes = [];
-
 let ai = null;
 function getAI() {
-  if (!ai && process.env.GEMINI_API_KEY) {
-    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  if (!ai) {
+    ai = new GoogleGenAI({
+      vertexai: true,
+      project: process.env.GOOGLE_CLOUD_PROJECT || "vibe2prod-509620",
+      location: "global",
+    });
   }
   return ai;
 }
 
-app.get("/api/notes", (req, res) => {
-  res.json(notes);
+app.get(["/health", "/api/health"], (req, res) => {
+  res.status(200).json({ status: "ok" });
 });
 
-app.post("/api/notes", (req, res) => {
-  const text = req.body?.text;
-  if (typeof text !== "string" || !text.trim()) {
-    return res.status(400).json({ error: "Text is required and must be a non-empty string" });
+app.get("/api/notes", async (req, res, next) => {
+  try {
+    const snapshot = await notesCollection.orderBy("id", "asc").get();
+    const notesList = snapshot.docs.map((doc) => doc.data());
+    res.json(notesList);
+  } catch (err) {
+    next(err);
   }
-  const note = {
-    id: Date.now(),
-    text: text.trim().slice(0, 10000),
-  };
-  notes.push(note);
-  res.status(201).json(note);
 });
 
-app.delete("/api/notes/:id", (req, res) => {
-  const token = req.headers["x-admin-token"];
-  if (!ADMIN_TOKEN || typeof token !== "string") {
-    return res.status(401).json({ error: "Unauthorized" });
+app.post("/api/notes", async (req, res, next) => {
+  try {
+    const text = req.body?.text;
+    if (typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ error: "Text is required and must be a non-empty string" });
+    }
+    const note = {
+      id: Date.now(),
+      text: text.trim().slice(0, 10000),
+    };
+    await notesCollection.doc(String(note.id)).set(note);
+    res.status(201).json(note);
+  } catch (err) {
+    next(err);
   }
+});
 
-  const tokenBuf = Buffer.from(token);
-  const adminBuf = Buffer.from(ADMIN_TOKEN);
-  if (tokenBuf.length !== adminBuf.length || !crypto.timingSafeEqual(tokenBuf, adminBuf)) {
-    return res.status(403).json({ error: "Forbidden" });
+app.delete("/api/notes/:id", async (req, res, next) => {
+  try {
+    const adminToken = process.env.ADMIN_TOKEN;
+    const token = req.headers["x-admin-token"];
+    if (!adminToken || typeof token !== "string") {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const tokenBuf = Buffer.from(token);
+    const adminBuf = Buffer.from(adminToken);
+    if (tokenBuf.length !== adminBuf.length || !crypto.timingSafeEqual(tokenBuf, adminBuf)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: "Invalid note id" });
+    }
+
+    await notesCollection.doc(String(id)).delete();
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
   }
-
-  const id = Number(req.params.id);
-  if (isNaN(id)) {
-    return res.status(400).json({ error: "Invalid note id" });
-  }
-
-  notes = notes.filter((n) => n.id !== id);
-  res.json({ ok: true });
 });
 
 app.post("/api/summarize", async (req, res) => {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(503).json({ error: "Gemini API key is not configured" });
-    }
     const client = getAI();
-    const notesToSummarize = Array.isArray(req.body?.notes) ? req.body.notes : notes;
+    let notesToSummarize;
+    if (Array.isArray(req.body?.notes)) {
+      notesToSummarize = req.body.notes;
+    } else {
+      const snapshot = await notesCollection.orderBy("id", "asc").get();
+      notesToSummarize = snapshot.docs.map((doc) => doc.data());
+    }
     const contents =
       "Summarize these notes:\n" +
       notesToSummarize
@@ -166,44 +171,67 @@ app.post("/api/summarize", async (req, res) => {
   }
 });
 
-app.post("/api/upload", upload.single("file"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
-  }
-  res.json({ name: req.file.filename });
-});
-
-app.get("/api/files/:name", (req, res) => {
-  const reqName = String(req.params.name || "");
-  if (!isSafePathSegment(reqName)) {
-    return res.status(400).json({ error: "Invalid file name" });
-  }
-
-  const files = fs.readdirSync(uploadsDir);
-  const matched = files.find((f) => f === reqName);
-  if (!matched) {
-    return res.status(404).json({ error: "File not found" });
-  }
-
-  const ext = path.extname(matched);
-  if (ext) {
-    res.type(ext);
-  }
-  const stream = fs.createReadStream(path.join(uploadsDir, matched));
-  stream.on("error", () => {
-    if (!res.headersSent) {
-      res.status(404).json({ error: "File not found" });
+app.post("/api/upload", upload.single("file"), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
     }
-  });
-  stream.pipe(res);
+    const unique = crypto.randomBytes(16).toString("hex");
+    const ext = path.extname(req.file.originalname || "").slice(0, 10).replace(/[^a-zA-Z0-9.]/g, "");
+    const filename = `${unique}${ext}`;
+    const file = bucket.file(filename);
+    await file.save(req.file.buffer, {
+      contentType: req.file.mimetype || "application/octet-stream",
+      resumable: false,
+    });
+    res.json({ name: filename });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.get("/api/export", (req, res) => {
+app.get("/api/files/:name", async (req, res, next) => {
+  try {
+    const reqName = String(req.params.name || "");
+    if (!isSafePathSegment(reqName)) {
+      return res.status(400).json({ error: "Invalid file name" });
+    }
+
+    const file = bucket.file(reqName);
+    const [exists] = await file.exists();
+    if (!exists) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    const ext = path.extname(reqName);
+    if (ext) {
+      res.type(ext);
+    }
+    const stream = file.createReadStream();
+    stream.on("error", (err) => {
+      console.error("File stream error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to stream file" });
+      }
+    });
+    stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/export", async (req, res) => {
   try {
     const rawName = req.query.name;
     const exportName = isSafeFilename(rawName) ? rawName : "export";
     const zip = new AdmZip();
-    zip.addLocalFolder(uploadsDir);
+    const [files] = await bucket.getFiles();
+    await Promise.all(
+      files.map(async (file) => {
+        const [content] = await file.download();
+        zip.addFile(file.name, content);
+      })
+    );
     const buffer = zip.toBuffer();
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${exportName}.zip"`);
