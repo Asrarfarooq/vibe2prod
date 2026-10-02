@@ -43,7 +43,7 @@ steps:
       - --cpu=2
       - --memory=4Gi
       - --max-retries=0
-      - --task-timeout=40m
+      - --task-timeout=130m
 
   - id: deploy-architect-agent
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -63,7 +63,7 @@ steps:
       - --cpu=2
       - --memory=4Gi
       - --max-retries=0
-      - --task-timeout=40m
+      - --task-timeout=130m
 
   - id: deploy-iac-agent
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -83,7 +83,7 @@ steps:
       - --cpu=2
       - --memory=4Gi
       - --max-retries=0
-      - --task-timeout=40m
+      - --task-timeout=130m
 
   - id: deploy-deploy-agent
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -103,7 +103,7 @@ steps:
       - --cpu=2
       - --memory=4Gi
       - --max-retries=0
-      - --task-timeout=40m
+      - --task-timeout=130m
 
   - id: build-dashboard
     name: gcr.io/cloud-builders/docker

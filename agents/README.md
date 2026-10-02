@@ -60,7 +60,7 @@ Job: `codeguard-agent`. Workflow: `checkout -> scan -> fixer -> verify -> open_p
 - `open_pr`: if files changed, commits, pushes the run branch and opens the PR with fixed and remaining issues and a before/after scanner table.
 - `finish`: `awaiting_approval`; artifact: PR. `result`: findings before/after, fixed, remaining, PR number.
 
-Limits: `MAX_LLM_CALLS` 150, `STAGE_TIMEOUT_S` 1800.
+Limits: `MAX_LLM_CALLS` 500, `STAGE_TIMEOUT_S` 7200.
 
 ### architect (stage 2)
 
@@ -73,7 +73,7 @@ Job: `architect-agent`. Workflow: `checkout -> gather -> writer -> critic -> gat
 - `write_doc`: writes `<app>/docs/DESIGN.md` and pushes it.
 - `finish`: `awaiting_approval`; artifacts: design doc, PR. `result`: the structured design (resource settings as typed values), critic verdict, rounds, doc path.
 
-Tools: `list_files`, `read_file`. Limits: `MAX_LLM_CALLS` 60, `STAGE_TIMEOUT_S` 1200.
+Tools: `list_files`, `read_file`. Limits: `MAX_LLM_CALLS` 500, `STAGE_TIMEOUT_S` 7200.
 
 ### iac (stage 3)
 
@@ -86,7 +86,7 @@ Job: `iac-agent`. Workflow: `checkout -> load_design -> writer -> validate`; `va
 - `commit`: commits and pushes `infra/` (and any app code changes).
 - `finish`: `awaiting_approval`; artifacts: Terraform files, cost estimate, PR. `result`: files, plan summary, cost, `image_var`, `infra_dir`, backend bucket and prefix, deviations from the design.
 
-Limits: `MAX_LLM_CALLS` 80, `STAGE_TIMEOUT_S` 1800.
+Limits: `MAX_LLM_CALLS` 500, `STAGE_TIMEOUT_S` 7200.
 
 ### deploy (stage 4)
 
@@ -101,7 +101,7 @@ Job: `deploy-agent`. Workflow: `checkout -> build_image -> plan -> gate_plan -> 
 - `auditor`: adds at most 4 judged checks from the probe evidence and writes the readiness report.
 - `finish`: score 0-100 as the mean of five categories (Security, Reliability, Cost, Observability, Deploy health), each a weighted pass rate. Writes `runs/{id}.score` and `app.url`, the project's `app_url`, and `awaiting_approval` with artifacts: live app link and readiness report. `result`: service URL, image, apply summary, score.
 
-Limits: `MAX_LLM_CALLS` 10, `STAGE_TIMEOUT_S` 3600. Overrides: `TF_STATE_BUCKET`, `DEPLOY_REGION`, `BUILD_SOURCE_BUCKET`, `AR_REPO`, `BUILD_SA`.
+Limits: `MAX_LLM_CALLS` 500, `STAGE_TIMEOUT_S` 7200. Overrides: `TF_STATE_BUCKET`, `DEPLOY_REGION`, `BUILD_SOURCE_BUCKET`, `AR_REPO`, `BUILD_SA`.
 
 ## Environment variables
 

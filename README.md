@@ -121,11 +121,12 @@ A push to `main` triggers Cloud Build, which:
 | Job | Env | Resources | Timeout |
 |---|---|---|---|
 | `hello-agent` | `AGENT=hello` | default | 10 min |
-| `codeguard-agent` | `AGENT=codeguard`, `STAGE=codeguard` | 2 CPU, 4 GiB | 40 min |
-| `iac-agent` | `AGENT=iac`, `STAGE=iac` | 2 CPU, 4 GiB | 40 min |
-| `deploy-agent` | `AGENT=deploy`, `STAGE=deploy` | 2 CPU, 4 GiB | 40 min |
+| `codeguard-agent` | `AGENT=codeguard`, `STAGE=codeguard` | 2 CPU, 4 GiB | 130 min |
+| `architect-agent` | `AGENT=architect`, `STAGE=architect` | 2 CPU, 4 GiB | 130 min |
+| `iac-agent` | `AGENT=iac`, `STAGE=iac` | 2 CPU, 4 GiB | 130 min |
+| `deploy-agent` | `AGENT=deploy`, `STAGE=deploy` | 2 CPU, 4 GiB | 130 min |
 
-The dashboard image is not built by Cloud Build yet.
+Each agent stops itself at `STAGE_TIMEOUT_S` (default 2 hours), before the job timeout. Cloud Build then builds the dashboard image and redeploys `vibe2prod-dashboard`.
 
 Run a deployed job by hand (the run doc `runs/<run_id>` must exist and the earlier stages' results must be in it):
 

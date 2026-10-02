@@ -364,7 +364,7 @@ async def main() -> int:
             prompt="Deploy and audit the app.",
             state={},
             max_llm_calls=env_int("MAX_LLM_CALLS", 500),
-            timeout_s=env_int("STAGE_TIMEOUT_S", 3600),
+            timeout_s=env_int("STAGE_TIMEOUT_S", 7200),
         )
 
     return await guarded(client, run, emitter, body)

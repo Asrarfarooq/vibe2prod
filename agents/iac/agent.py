@@ -541,7 +541,7 @@ async def main() -> int:
             prompt="Write the Terraform and estimate the cost.",
             state={},
             max_llm_calls=env_int("MAX_LLM_CALLS", 500),
-            timeout_s=env_int("STAGE_TIMEOUT_S", 1800),
+            timeout_s=env_int("STAGE_TIMEOUT_S", 7200),
         )
 
     return await guarded(client, run, emitter, body)

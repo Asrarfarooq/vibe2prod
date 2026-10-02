@@ -362,7 +362,7 @@ async def main() -> int:
 
     async def body():
         repo = Repo(run, github_token(run.project))
-        fix_budget_s = env_int("STAGE_TIMEOUT_S", 1800) - WRAP_UP_S
+        fix_budget_s = env_int("STAGE_TIMEOUT_S", 7200) - WRAP_UP_S
         workflow, tool_names, wrap_up = build(run, client, emitter, repo, fix_budget_s)
         plugins = [
             GuardrailPlugin(tool_names, run.app_dir, emitter),
