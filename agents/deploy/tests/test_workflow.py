@@ -7,7 +7,9 @@ from deploy import agent
 
 
 def test_workflow_builds():
-    run = RunContext("r", "deploy", "p", "o/r", "main", None, "flawed", Path("/tmp/w"))
+    run = RunContext(
+        "r", "deploy", "p", "o/r", "main", None, "vibecoded-app", Path("/tmp/w")
+    )
     workflow = agent.build(
         run, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {"stages": {}}
     )

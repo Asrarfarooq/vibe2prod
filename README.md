@@ -78,7 +78,7 @@ sequenceDiagram
 │   ├── api/main.py          REST + SSE API over Firestore; starts stage jobs
 │   └── frontend/            React 19 + Vite + TypeScript, plain CSS
 ├── infra/                   Reserved for platform Terraform; empty
-└── flawed/                  Deliberately insecure sample app used as agent test input
+└── vibecoded-app/           Deliberately insecure sample app used as agent test input
 ```
 
 ## Agents
@@ -160,4 +160,4 @@ ruff format --check agents web/api
 
 ## Sample app
 
-`flawed/` is a small notes app (Express + Vite React, Gemini summaries) written with the security problems vibe-coded apps usually have. It is the test input for the agents until the team's real AI Studio app exists. A project doc can point at it with `repo` set to this repo and `path` set to `flawed`. Do not deploy it by hand or reuse anything from it. See [flawed/README.md](flawed/README.md).
+`vibecoded-app/` is a small notes app (Express + Vite React, Gemini summaries) written with the security problems vibe-coded apps usually have. It is the test input for the agents until the team's real AI Studio app exists. A project doc can point at it with `repo` set to this repo and `path` set to `vibecoded-app`. Do not deploy it by hand or reuse anything from it. See [vibecoded-app/README.md](vibecoded-app/README.md).
