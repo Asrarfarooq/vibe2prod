@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 import subprocess
 from collections import Counter
 
@@ -8,6 +7,7 @@ from common import context
 from common.events import Emitter, FirestoreEventsPlugin
 from common.guardrails import GuardrailPlugin, safe_path
 from common.model import gemini, thinking
+from common.npm import latest_version
 from common.repo import Repo, github_token
 from common.stage import env_int, guarded, run_workflow, set_stage
 from google.adk import Agent, Event, Workflow
@@ -50,7 +50,7 @@ The app is in the current folder. Scanner findings are below. Fix the real secur
 - Fix injection (command, path traversal, XSS), add input validation, restrict CORS, stop leaking stack traces, listen on process.env.PORT.
 - Send standard security headers (e.g. helmet for Express) and stop advertising the framework (X-Powered-By).
 - Upgrade vulnerable dependencies in package.json to the version latest_version returns (never downgrade), adapt code to breaking changes, then call update_lockfile.
-- Harden the Dockerfile (base image node:24-slim, the current Node LTS; non-root user, npm ci, no secrets copied). The Node version must satisfy the engines field of every dependency you install.
+- Harden the Dockerfile: non-root user, no secrets copied, runtime base image node:24-slim (the current Node LTS). In a multi-stage build, harden the final stage and leave the build stage's base image alone, since builds may need its compilers. Use npm ci only if package-lock.json exists after your changes; otherwise keep npm install. The Node version must satisfy the engines field of every dependency you install.
 Scanners miss things: read every source file and also fix security problems they did not report.
 Keep Gemini model ids exactly as the app has them; never switch to an older model.
 Keep changes minimal and keep the app working. Do not add features. Leave infrastructure (databases, auth providers, secret storage) to later stages and list it under remaining.
@@ -136,26 +136,6 @@ def build(
             "exit_code": proc.returncode,
             "output": (proc.stdout + proc.stderr)[-1500:],
         }
-
-    def latest_version(package: str) -> dict:
-        """Return the latest published version of an npm package.
-
-        Args:
-          package: npm package name, for example multer.
-        """
-        if not re.fullmatch(r"(@[a-z0-9._-]+/)?[a-z0-9._-]+", package):
-            return {"error": "invalid package name"}
-        proc = subprocess.run(
-            ["npm", "view", package, "version"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=60,
-        )
-        if proc.returncode != 0:
-            return {"error": proc.stderr[-300:]}
-        return {"package": package, "latest": proc.stdout.strip()}
 
     def rescan() -> dict:
         """Run all scanners again and return the remaining findings."""

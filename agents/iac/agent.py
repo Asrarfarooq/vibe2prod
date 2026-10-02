@@ -9,6 +9,7 @@ from common import context
 from common.events import Emitter, FirestoreEventsPlugin
 from common.guardrails import GuardrailPlugin, PathNotAllowed, safe_path
 from common.model import gemini, thinking
+from common.npm import latest_version
 from common.repo import Repo, github_token
 from common.stage import env_int, guarded, run_workflow, set_stage
 from google.adk import Agent, Event, Workflow
@@ -59,7 +60,7 @@ Rules:
 - Cloud Storage: uniform_bucket_level_access = true, public_access_prevention = "enforced", force_destroy = true, location upper(local.region).
 - Forbidden: google_service_account and any IAM on service accounts, data sources, modules, provisioners, import blocks, google_project_service, authoritative IAM (_iam_policy, _iam_binding), billing budgets, references to any resource this stack does not create.
 
-App code: if the design doc lists code_changes, implement exactly those in the app source so the app works on this infrastructure, reading the env var names the Terraform sets. Keep edits minimal and keep existing behavior and security fixes; no refactors, no new features, no Dockerfile base-image changes. If a change needs a new npm dependency, add it to package.json with a caret range of its current major version, then call update_lockfile. Never remove a dependency the code still uses. If code_changes is empty or absent, do not edit any app file. Gemini calls in app code use model gemini-3.8-flash with location global; never another model id.
+App code: if the design doc lists code_changes, implement exactly those in the app source so the app works on this infrastructure, reading the env var names the Terraform sets. Keep edits minimal and keep existing behavior and security fixes; no refactors, no new features, no Dockerfile base-image changes. If a change needs a new npm dependency, call latest_version and add it to package.json as a caret range of that version, then call update_lockfile. Never remove a dependency the code still uses. If code_changes is empty or absent, do not edit any app file. Gemini calls in app code use model gemini-3.8-flash with location global; never another model id.
 
 Work: read infra/versions.tf and the app files you need, write the files, then call run_validate. It formats the Terraform, runs terraform validate and plan, applies the platform policy checks, and syntax-checks changed JavaScript. Fix every error it reports and call it again until it returns ok. Then return the TerraformReport."""
 
@@ -245,6 +246,7 @@ def build(run: context.RunContext, client, emitter: Emitter, repo: Repo):
         read_file,
         write_file,
         delete_file,
+        latest_version,
         update_lockfile,
         run_validate,
     ]
