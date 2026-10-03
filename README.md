@@ -8,13 +8,15 @@ Vibe2Prod takes a vibe-coded web app (the kind AI Studio generates: Express + Vi
 
 | Component | State |
 |---|---|
-| CodeGuard (`agents/codeguard`) | Cloud Run Job `codeguard-agent`; has completed a run as a job |
-| Architect (`agents/architect`) | Tested locally; job `architect-agent` deployed by Cloud Build |
-| IaC (`agents/iac`) | Tested locally end to end; Cloud Run Job `iac-agent`. Support for app code changes from the design is still being finished |
-| Deploy (`agents/deploy`) | Tested locally end to end; Cloud Run Job `deploy-agent` |
+| CodeGuard (`agents/codeguard`) | Cloud Run Job `codeguard-agent` |
+| Architect (`agents/architect`) | Cloud Run Job `architect-agent` |
+| IaC (`agents/iac`) | Cloud Run Job `iac-agent`. Support for app code changes from the design is still being finished |
+| Deploy (`agents/deploy`) | Cloud Run Job `deploy-agent` |
 | Hello (`agents/hello`) | Cloud Run Job `hello-agent` (smoke test) |
-| Dashboard (`web/`) | Runs locally, not deployed |
+| Dashboard (`web/`) | Cloud Run service `vibe2prod-dashboard`, read-only without sign-in at https://vibe2prod-dashboard-zwl5vhlmla-uc.a.run.app |
 | Platform Terraform (`infra/`) | Empty; platform resources were created with gcloud |
+
+Completed end-to-end runs (all four stages approved) as of 2026-10-02: `vibed-app-4` (readiness 95), `vibed-app-5` (94), `juice-shop-1` (94), `lalitha-app-1` (95), `lalitha-app-2` (100).
 
 ## How a run works
 
@@ -86,9 +88,9 @@ sequenceDiagram
 | Stage | Folder | Cloud Run Job | What it does | Reads | Writes | Status |
 |---|---|---|---|---|---|---|
 | 1 | `agents/codeguard` | `codeguard-agent` | Runs gitleaks, semgrep, osv-scanner and hadolint; Gemini fixes the code; rescans | App repo at the base branch | Run branch, PR, findings before/after | Deployed |
-| 2 | `agents/architect` | `architect-agent` | Writer drafts a design doc, an independent critic reviews it against the code, up to 3 rounds | Run branch, CodeGuard summary | `<app>/docs/DESIGN.md`, structured design | Tested locally |
-| 3 | `agents/iac` | `iac-agent` | Writes Terraform for the design, validates and plans it against platform policy, prices it with Cloud Billing Catalog list prices | Architect result | `<app>/infra/*.tf`, plan summary, monthly cost | Tested locally, deployed |
-| 4 | `agents/deploy` | `deploy-agent` | Builds the image with Cloud Build, gates the plan, applies it, probes the live app, scores readiness 0-100 | IaC result, run branch | Live Cloud Run service, readiness score, audit report | Tested locally, deployed |
+| 2 | `agents/architect` | `architect-agent` | Writer drafts a design doc, an independent critic reviews it against the code, up to 3 rounds | Run branch, CodeGuard summary | `<app>/docs/DESIGN.md`, structured design | Deployed |
+| 3 | `agents/iac` | `iac-agent` | Writes Terraform for the design, validates and plans it against platform policy, prices it with Cloud Billing Catalog list prices | Architect result | `<app>/infra/*.tf`, plan summary, monthly cost | Deployed |
+| 4 | `agents/deploy` | `deploy-agent` | Builds the image with Cloud Build, gates the plan, applies it, probes the live app, scores readiness 0-100 | IaC result, run branch | Live Cloud Run service, readiness score, audit report | Deployed |
 
 See [agents/README.md](agents/README.md) for each agent's workflow, the shared code and how to run a stage locally.
 
@@ -96,7 +98,7 @@ The dashboard starts jobs named `<stage>-agent`.
 
 ## Dashboard
 
-`web/` is a single Cloud Run service image: FastAPI serves `/api/*` and the built React app. The browser never talks to Firestore; the API reads Firestore and relays run and event changes over SSE. Writes (start run, approve, deny) require the `X-Approver-Key` header, matched against per-person keys from the `APPROVER_KEYS` env var (JSON object of email to key, intended to come from Secret Manager secret `dashboard-approver-keys`). The dashboard is not deployed yet. See [web/README.md](web/README.md).
+`web/` is a single Cloud Run service image: FastAPI serves `/api/*` and the built React app. The browser never talks to Firestore; the API reads Firestore and relays run and event changes over SSE. Writes (start run, approve, deny) require the `X-Approver-Key` header, matched against per-person keys from the `APPROVER_KEYS` env var (JSON object of email to key, from Secret Manager secret `dashboard-approver-keys`). Cloud Build deploys it on every push to `main` with `--no-invoker-iam-check`, so pages and the read API need no sign-in. See [web/README.md](web/README.md).
 
 ## GCP setup
 

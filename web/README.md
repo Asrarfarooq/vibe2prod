@@ -1,6 +1,6 @@
 # web
 
-The Vibe2Prod dashboard: a React frontend and a FastAPI backend built into one container. The API serves `/api/*` and the built frontend from the same origin. Not deployed yet; the planned target is Cloud Run service `vibe2prod-dashboard` running as service account `vibe2prod-dashboard`.
+The Vibe2Prod dashboard: a React frontend and a FastAPI backend built into one container. The API serves `/api/*` and the built frontend from the same origin. Deployed as Cloud Run service `vibe2prod-dashboard` running as service account `vibe2prod-dashboard`.
 
 ## Layout
 
@@ -86,4 +86,4 @@ ruff check web/api
 docker build -t vibe2prod-dashboard web
 ```
 
-The container listens on `$PORT` (default 8080). No Cloud Build step builds or deploys it yet.
+The container listens on `$PORT` (default 8080). `../cloudbuild.yaml` builds and deploys it on every push to `main`.
