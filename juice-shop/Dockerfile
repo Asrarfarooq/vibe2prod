@@ -1,14 +1,14 @@
 FROM node:24 AS installer
-COPY . /juice-shop
 WORKDIR /juice-shop
+COPY . /juice-shop
 RUN npm install -g typescript@^6.0.3
 RUN npm install --omit=dev
 RUN npm dedupe --omit=dev
 RUN rm -rf frontend/node_modules
 RUN rm -rf frontend/.angular
 RUN rm -rf frontend/src/assets
-RUN mkdir logs
-RUN chown -R 65532 logs
+RUN mkdir -p logs
+RUN chown -R node:node logs
 RUN chgrp -R 0 ftp/ frontend/dist/ logs/ data/ i18n/
 RUN chmod -R g=u ftp/ frontend/dist/ logs/ data/ i18n/
 RUN rm ftp/legal.md || true
@@ -19,7 +19,7 @@ ARG CYCLONEDX_NPM_VERSION='^2.0.0||^3.0.0||^4.0.0'
 RUN npm install -g @cyclonedx/cyclonedx-npm@$CYCLONEDX_NPM_VERSION
 RUN npm run sbom
 
-FROM gcr.io/distroless/nodejs24-debian13
+FROM node:24-slim
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL maintainer="Bjoern Kimminich <bjoern.kimminich@owasp.org>" \
@@ -35,7 +35,7 @@ LABEL maintainer="Bjoern Kimminich <bjoern.kimminich@owasp.org>" \
     org.opencontainers.image.revision=$VCS_REF \
     org.opencontainers.image.created=$BUILD_DATE
 WORKDIR /juice-shop
-COPY --from=installer --chown=65532:0 /juice-shop .
-USER 65532
+COPY --from=installer --chown=node:node /juice-shop .
+USER node
 EXPOSE 3000
 CMD ["/juice-shop/build/app.js"]

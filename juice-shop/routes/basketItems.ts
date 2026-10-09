@@ -65,7 +65,11 @@ export function quantityCheckBeforeBasketItemAddition () {
 export function quantityCheckBeforeBasketItemUpdate () {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const item = await BasketItemModel.findOne({ where: { id: req.params.id } })
+      const id = parseInt(req.params.id, 10)
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid basket item id' })
+      }
+      const item = await BasketItemModel.findOne({ where: { id } })
       const user = security.authenticatedUsers.from(req)
       challengeUtils.solveIf(challenges.basketManipulateChallenge, () => { return user && req.body.BasketId && user.bid != req.body.BasketId }) // eslint-disable-line eqeqeq
       if (req.body.quantity) {
