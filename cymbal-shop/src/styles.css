@@ -1,0 +1,255 @@
+:root {
+  --cymbal-green: #188038;
+  --cymbal-green-dark: #137333;
+  --cymbal-bg: #f8f9fa;
+  --cymbal-surface: #ffffff;
+  --cymbal-border: #dadce0;
+  --cymbal-text: #202124;
+  --cymbal-muted: #5f6368;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--cymbal-bg);
+  color: var(--cymbal-text);
+}
+
+.topbar {
+  background: var(--cymbal-surface);
+  border-bottom: 1px solid var(--cymbal-border);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand img {
+  height: 40px;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.tab-btn {
+  border: 1px solid var(--cymbal-border);
+  background: var(--cymbal-surface);
+  color: var(--cymbal-text);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: var(--cymbal-green);
+  color: #fff;
+  border-color: var(--cymbal-green);
+}
+
+.store-meta {
+  font-size: 13px;
+  color: var(--cymbal-muted);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cart-pill {
+  background: #e6f4ea;
+  color: var(--cymbal-green-dark);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.hero {
+  background: linear-gradient(135deg, #e6f4ea 0%, #ceead6 100%);
+  border: 1px solid #a8dab5;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.hero h1 {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+
+.hero p {
+  margin: 0;
+  color: #3c4043;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+}
+
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--cymbal-surface);
+  border: 1px solid var(--cymbal-border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.product-img {
+  width: 100%;
+  height: 150px;
+  object-fit: contain;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+}
+
+.badge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.aisle-tag {
+  color: var(--cymbal-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.new-badge {
+  background: #e8f0fe;
+  color: #1967d2;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.oos-badge {
+  background: #fce8e6;
+  color: #c5221f;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.card h3 {
+  margin: 4px 0 6px;
+  font-size: 16px;
+}
+
+.card-desc {
+  font-size: 13px;
+  color: var(--cymbal-muted);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #f1f3f4;
+  padding-top: 10px;
+}
+
+.price {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.stock {
+  font-size: 12px;
+  color: var(--cymbal-muted);
+}
+
+.btn-primary {
+  background: var(--cymbal-green);
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary:disabled {
+  background: #dadce0;
+  cursor: not-allowed;
+}
+
+.panel {
+  background: var(--cymbal-surface);
+  border: 1px solid var(--cymbal-border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--cymbal-border);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.ai-output {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid var(--cymbal-border);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
