@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { GoogleGenAI } from "@google/genai";
 import "./styles.css";
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "Kq7xP2mVtR9wL4sZ8nB3cY6hJ1fD5gA0eU",
-});
 
 function App() {
   const [products, setProducts] = useState([]);
@@ -22,41 +17,56 @@ function App() {
     const endpoint = tab === "new" ? "/api/newproducts" : "/api/products";
     fetch(endpoint)
       .then((r) => r.json())
-      .then(setProducts);
+      .then(setProducts)
+      .catch((err) => console.error("Failed to fetch products:", err));
   }, [tab]);
 
   async function addProduct(e) {
     e.preventDefault();
     if (!name.trim()) return;
-    const res = await fetch("/api/products", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        aisle,
-        price: Number(price) || 4.99,
-        quantity: 25,
-        isNew: true,
-        description,
-      }),
-    });
-    const created = await res.json();
-    setProducts([...products, created]);
-    setName("");
-    setDescription("");
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          aisle,
+          price: Number(price) || 4.99,
+          quantity: 25,
+          isNew: true,
+          description: description.trim(),
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setProducts([...products, created]);
+        setName("");
+        setDescription("");
+      }
+    } catch (err) {
+      console.error("Failed to add product:", err);
+    }
   }
 
   async function askConcierge() {
-    const inStock = products
-      .filter((p) => p.quantity > 0)
-      .map((p) => `${p.name} ($${p.price}, ${p.aisle})`)
-      .join(", ");
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents:
-        `You are the Cymbal Superstore AI Shopping Concierge. Recommend a basket and quick recipe from our in-stock items (${inStock}) for: ${goal}`,
-    });
-    setAssistantReply(response.text);
+    if (!goal.trim()) return;
+    try {
+      const res = await fetch("/api/concierge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goal: goal.trim() }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setAssistantReply(errData.error || "Failed to generate recommendation");
+        return;
+      }
+      const data = await res.json();
+      setAssistantReply(data.reply || "");
+    } catch (err) {
+      console.error("Concierge request error:", err);
+      setAssistantReply("Unable to connect to shopping concierge.");
+    }
   }
 
   return (
@@ -121,10 +131,9 @@ function App() {
                       ) : null}
                     </div>
                     <h3>{p.name}</h3>
-                    <div
-                      className="card-desc"
-                      dangerouslySetInnerHTML={{ __html: p.description || "" }}
-                    />
+                    <div className="card-desc">
+                      {p.description || ""}
+                    </div>
                   </div>
                   <div className="card-footer">
                     <div>
@@ -157,10 +166,9 @@ function App() {
                 Recommend Basket
               </button>
               {assistantReply && (
-                <div
-                  className="ai-output"
-                  dangerouslySetInnerHTML={{ __html: assistantReply }}
-                />
+                <div className="ai-output">
+                  {assistantReply}
+                </div>
               )}
             </div>
 
