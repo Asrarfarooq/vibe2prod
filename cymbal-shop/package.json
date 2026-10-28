@@ -10,16 +10,22 @@
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
-    "axios": "0.21.1",
-    "body-parser": "1.19.0",
-    "cors": "2.8.5",
-    "express": "4.17.1",
-    "multer": "1.4.2",
+    "axios": "1.21.0",
+    "body-parser": "2.4.0",
+    "cors": "2.8.6",
+    "express": "5.3.0",
+    "follow-redirects": "1.16.2",
+    "helmet": "8.3.0",
+    "multer": "2.5.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "validator": "13.15.35"
+  },
+  "overrides": {
+    "follow-redirects": "1.16.2"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.0.0",
-    "vite": "^4.3.0"
+    "@vitejs/plugin-react": "6.1.2",
+    "vite": "8.3.5"
   }
 }
