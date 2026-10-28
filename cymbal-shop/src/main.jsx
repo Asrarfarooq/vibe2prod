@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { GoogleGenAI } from "@google/genai";
 import "./styles.css";
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "Kq7xP2mVtR9wL4sZ8nB3cY6hJ1fD5gA0eU",
-});
 
 function App() {
   const [products, setProducts] = useState([]);
@@ -17,46 +12,64 @@ function App() {
   const [description, setDescription] = useState("");
   const [goal, setGoal] = useState("Quick healthy weeknight snacks and drinks under $25");
   const [assistantReply, setAssistantReply] = useState("");
+  const [loadingConcierge, setLoadingConcierge] = useState(false);
 
   useEffect(() => {
     const endpoint = tab === "new" ? "/api/newproducts" : "/api/products";
     fetch(endpoint)
       .then((r) => r.json())
-      .then(setProducts);
+      .then(setProducts)
+      .catch(() => {});
   }, [tab]);
 
   async function addProduct(e) {
     e.preventDefault();
     if (!name.trim()) return;
-    const res = await fetch("/api/products", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        aisle,
-        price: Number(price) || 4.99,
-        quantity: 25,
-        isNew: true,
-        description,
-      }),
-    });
-    const created = await res.json();
-    setProducts([...products, created]);
-    setName("");
-    setDescription("");
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          aisle: aisle.trim() || "Grocery",
+          price: Number(price) || 4.99,
+          quantity: 25,
+          isNew: true,
+          description: description.trim(),
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setProducts([...products, created]);
+        setName("");
+        setDescription("");
+      }
+    } catch {
+      // Network error
+    }
   }
 
   async function askConcierge() {
-    const inStock = products
-      .filter((p) => p.quantity > 0)
-      .map((p) => `${p.name} ($${p.price}, ${p.aisle})`)
-      .join(", ");
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents:
-        `You are the Cymbal Superstore AI Shopping Concierge. Recommend a basket and quick recipe from our in-stock items (${inStock}) for: ${goal}`,
-    });
-    setAssistantReply(response.text);
+    if (!goal.trim() || loadingConcierge) return;
+    setLoadingConcierge(true);
+    try {
+      const res = await fetch("/api/concierge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goal }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setAssistantReply(err.error || "Unable to get recommendation at this time.");
+        return;
+      }
+      const data = await res.json();
+      setAssistantReply(data.reply || "");
+    } catch {
+      setAssistantReply("Unable to contact shopping concierge.");
+    } finally {
+      setLoadingConcierge(false);
+    }
   }
 
   return (
@@ -121,10 +134,9 @@ function App() {
                       ) : null}
                     </div>
                     <h3>{p.name}</h3>
-                    <div
-                      className="card-desc"
-                      dangerouslySetInnerHTML={{ __html: p.description || "" }}
-                    />
+                    <div className="card-desc">
+                      {p.description || ""}
+                    </div>
                   </div>
                   <div className="card-footer">
                     <div>
@@ -153,14 +165,17 @@ function App() {
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
               />
-              <button className="btn-primary" onClick={askConcierge}>
-                Recommend Basket
+              <button
+                className="btn-primary"
+                onClick={askConcierge}
+                disabled={loadingConcierge}
+              >
+                {loadingConcierge ? "Recommending..." : "Recommend Basket"}
               </button>
               {assistantReply && (
-                <div
-                  className="ai-output"
-                  dangerouslySetInnerHTML={{ __html: assistantReply }}
-                />
+                <div className="ai-output">
+                  {assistantReply}
+                </div>
               )}
             </div>
 

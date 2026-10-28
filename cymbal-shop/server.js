@@ -2,19 +2,117 @@ import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import multer from "multer";
+import helmet from "helmet";
 import path from "path";
+import fs from "fs";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
-import { exec } from "child_process";
+import { execFile } from "child_process";
+import { GoogleGenAI } from "@google/genai";
+import validator from "validator";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const upload = multer({ dest: "uploads/" });
 
-const ADMIN_TOKEN = "t9Xk2Lp7Qm4Rv8Zs3Nw6Yb1Hc5Jd0Fg";
+app.disable("x-powered-by");
 
-app.use(cors({ origin: "*" }));
-app.use(bodyParser.json({ limit: "50mb" }));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+// Restrict CORS
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : [];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      try {
+        const originUrl = new URL(origin);
+        if (
+          allowedOrigins.includes(origin) ||
+          originUrl.hostname === "localhost" ||
+          originUrl.hostname === "127.0.0.1"
+        ) {
+          return callback(null, true);
+        }
+      } catch {
+        // Invalid origin format
+      }
+      return callback(new Error("CORS policy violation"), false);
+    },
+    credentials: true,
+  })
+);
+
+app.use(bodyParser.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "dist")));
+
+// Upload configuration
+const uploadsDir = path.resolve(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeName = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${ext}`;
+    cb(null, safeName);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5 MB
+    files: 1,
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedExts = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only image files are allowed."));
+    }
+  },
+});
+
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+
+function safeCompare(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Google GenAI client
+let aiClient = null;
+function getAiClient() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  if (!aiClient) {
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
+}
 
 let products = [
   {
@@ -118,41 +216,164 @@ app.get("/api/newproducts", (req, res) => {
 });
 
 app.post("/api/products", (req, res) => {
-  const product = { id: Date.now(), isNew: true, ...req.body };
+  const { name, aisle, price, quantity, description, imgfile } = req.body || {};
+  if (!name || typeof name !== "string" || !name.trim()) {
+    return res.status(400).json({ error: "Product name is required" });
+  }
+  const parsedPrice = Number(price);
+  if (isNaN(parsedPrice) || parsedPrice < 0 || parsedPrice > 100000) {
+    return res.status(400).json({ error: "Invalid product price" });
+  }
+  const parsedQuantity = quantity !== undefined ? Number(quantity) : 0;
+  if (isNaN(parsedQuantity) || parsedQuantity < 0) {
+    return res.status(400).json({ error: "Invalid product quantity" });
+  }
+
+  const product = {
+    id: Date.now(),
+    name: validator.escape(name.trim()).slice(0, 100),
+    aisle: typeof aisle === "string" ? validator.escape(aisle.trim()).slice(0, 50) : "Grocery",
+    price: parsedPrice,
+    quantity: Math.floor(parsedQuantity),
+    isNew: true,
+    imgfile:
+      typeof imgfile === "string" && imgfile.startsWith("/product-images/")
+        ? imgfile.slice(0, 100)
+        : "",
+    description:
+      typeof description === "string" ? description.trim().slice(0, 500) : "",
+  };
   products.push(product);
-  res.json(product);
+  res.status(201).json(product);
 });
 
 app.delete("/api/products/:id", (req, res) => {
-  if (req.headers["x-admin-token"] == ADMIN_TOKEN) {
-    products = products.filter((p) => p.id != req.params.id);
+  const token = req.headers["x-admin-token"];
+  if (!ADMIN_TOKEN || !safeCompare(token, ADMIN_TOKEN)) {
+    return res.status(403).json({ error: "Forbidden: invalid admin token" });
   }
+  const id = Number(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: "Invalid product id" });
+  }
+  products = products.filter((p) => p.id !== id);
   res.json({ ok: true });
 });
 
+app.post("/api/concierge", async (req, res) => {
+  try {
+    const { goal } = req.body || {};
+    if (!goal || typeof goal !== "string" || !goal.trim()) {
+      return res.status(400).json({ error: "Shopping goal is required" });
+    }
+    const safeGoal = goal.trim().slice(0, 500);
+
+    const ai = getAiClient();
+    if (!ai) {
+      return res.status(503).json({
+        error: "AI Concierge is currently unavailable (API key not configured)",
+      });
+    }
+
+    const inStock = products
+      .filter((p) => p.quantity > 0)
+      .map((p) => `${p.name} ($${p.price}, ${p.aisle})`)
+      .join(", ");
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: `You are the Cymbal Superstore AI Shopping Concierge. Recommend a basket and quick recipe from our in-stock items (${inStock}) for: ${safeGoal}`,
+    });
+
+    res.json({ reply: response.text || "" });
+  } catch (err) {
+    console.error("AI Concierge error:", err.message);
+    res.status(500).json({ error: "Failed to generate recommendation" });
+  }
+});
+
 app.post("/api/upload", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
   res.json({ name: req.file.filename });
 });
 
 app.get("/api/files/:name", (req, res) => {
-  res.sendFile(path.join(__dirname, "uploads", req.params.name));
+  const fileName = req.params.name;
+  if (!fileName || !/^[a-zA-Z0-9_-]+\.[a-zA-Z0-9]{1,10}$/.test(fileName)) {
+    return res.status(400).json({ error: "Invalid filename" });
+  }
+
+  const filePath = uploadsDir + "/" + fileName;
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+
+  const ext = path.extname(fileName).toLowerCase();
+  const mimeTypes = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+  };
+  if (mimeTypes[ext]) {
+    res.setHeader("Content-Type", mimeTypes[ext]);
+  }
+
+  const stream = fs.createReadStream(filePath);
+  stream.on("error", () => {
+    if (!res.headersSent) {
+      res.status(404).json({ error: "File not found" });
+    }
+  });
+  stream.pipe(res);
 });
 
 app.get("/api/export", (req, res) => {
-  exec(`zip -r /tmp/${req.query.name}.zip uploads`, (err) => {
-    if (err) return res.status(500).send(err.stack);
-    res.download(`/tmp/${req.query.name}.zip`);
+  const { name } = req.query;
+  if (!name || typeof name !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) {
+    return res.status(400).json({ error: "Invalid export name parameter" });
+  }
+
+  const zipPath = `/tmp/${name}.zip`;
+
+  execFile("zip", ["-r", zipPath, "uploads"], { cwd: __dirname }, (err) => {
+    if (err) {
+      console.error("Export command failed:", err.message);
+      return res.status(500).json({ error: "Export failed" });
+    }
+    res.download(zipPath, `${name}.zip`, (downloadErr) => {
+      if (downloadErr) {
+        console.error("Download error:", downloadErr.message);
+      }
+      fs.unlink(zipPath, () => {});
+    });
   });
 });
 
 app.get("/search", (req, res) => {
-  res.send(`<h1>Search results for ${req.query.q}</h1>`);
+  const rawQ = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const safeQ = validator.escape(rawQ);
+  const results = products.filter((p) =>
+    p.name.toLowerCase().includes(rawQ.toLowerCase())
+  );
+  res.json({ query: safeQ, results });
 });
 
 app.use((err, req, res, next) => {
-  res.status(500).send(err.stack);
+  console.error("Unhandled error:", err.message);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    error: status === 400 ? err.message : "Internal Server Error",
+  });
 });
 
-app.listen(8000, () =>
-  console.log("Cymbal Superstore Inventory API running on http://localhost:8000")
+const PORT = process.env.PORT || 8000;
+app.listen(PORT, () =>
+  console.log(`Cymbal Superstore Inventory API running on http://localhost:${PORT}`)
 );
