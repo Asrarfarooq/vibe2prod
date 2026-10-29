@@ -9,6 +9,7 @@ import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { execFile } from "child_process";
 import { GoogleGenAI } from "@google/genai";
+import { Firestore } from "@google-cloud/firestore";
 import validator from "validator";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,7 +46,8 @@ app.use(
         if (
           allowedOrigins.includes(origin) ||
           originUrl.hostname === "localhost" ||
-          originUrl.hostname === "127.0.0.1"
+          originUrl.hostname === "127.0.0.1" ||
+          originUrl.hostname.endsWith(".run.app")
         ) {
           return callback(null, true);
         }
@@ -57,6 +59,11 @@ app.use(
     credentials: true,
   })
 );
+
+// Health check endpoint for Cloud Run probes
+app.get(["/health", "/healthz"], (req, res) => {
+  res.json({ status: "healthy" });
+});
 
 app.use(bodyParser.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "dist")));
@@ -103,18 +110,28 @@ function safeCompare(a, b) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-// Google GenAI client
+// Google GenAI client (Vertex AI)
 let aiClient = null;
 function getAiClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
   if (!aiClient) {
-    aiClient = new GoogleGenAI({ apiKey });
+    aiClient = new GoogleGenAI({
+      vertexai: true,
+      project: process.env.GOOGLE_CLOUD_PROJECT || "vibe2prod-509620",
+      location: "global",
+    });
   }
   return aiClient;
 }
 
-let products = [
+// Firestore Database Client
+const firestore = new Firestore({
+  projectId: process.env.GOOGLE_CLOUD_PROJECT || "vibe2prod-509620",
+  databaseId: process.env.FIRESTORE_DATABASE_ID || "app-cymbal-shop-2",
+});
+
+const productsCol = firestore.collection("products");
+
+const defaultProducts = [
   {
     id: 101,
     name: "Parmesan Crisps",
@@ -207,57 +224,109 @@ let products = [
   },
 ];
 
-app.get("/api/products", (req, res) => {
-  res.json(products);
+async function seedProducts() {
+  try {
+    const snapshot = await productsCol.limit(1).get();
+    if (snapshot.empty) {
+      console.log("Seeding default products into Firestore...");
+      const batch = firestore.batch();
+      for (const p of defaultProducts) {
+        batch.set(productsCol.doc(String(p.id)), p);
+      }
+      await batch.commit();
+      console.log("Default products seeded successfully.");
+    }
+  } catch (err) {
+    console.error("Error seeding products:", err.message);
+  }
+}
+seedProducts();
+
+app.get("/api/products", async (req, res, next) => {
+  try {
+    const snapshot = await productsCol.get();
+    const items = snapshot.docs.map((doc) => doc.data());
+    items.sort((a, b) => a.id - b.id);
+    res.json(items);
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.get("/api/newproducts", (req, res) => {
-  res.json(products.filter((p) => p.isNew && p.quantity > 0));
+app.get("/api/newproducts", async (req, res, next) => {
+  try {
+    const snapshot = await productsCol.get();
+    const items = snapshot.docs
+      .map((doc) => doc.data())
+      .filter((p) => p.isNew && p.quantity > 0)
+      .sort((a, b) => a.id - b.id);
+    res.json(items);
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.post("/api/products", (req, res) => {
-  const { name, aisle, price, quantity, description, imgfile } = req.body || {};
-  if (!name || typeof name !== "string" || !name.trim()) {
-    return res.status(400).json({ error: "Product name is required" });
-  }
-  const parsedPrice = Number(price);
-  if (isNaN(parsedPrice) || parsedPrice < 0 || parsedPrice > 100000) {
-    return res.status(400).json({ error: "Invalid product price" });
-  }
-  const parsedQuantity = quantity !== undefined ? Number(quantity) : 0;
-  if (isNaN(parsedQuantity) || parsedQuantity < 0) {
-    return res.status(400).json({ error: "Invalid product quantity" });
-  }
+app.post("/api/products", async (req, res, next) => {
+  try {
+    const { name, aisle, price, quantity, description, imgfile } = req.body || {};
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "Product name is required" });
+    }
+    const parsedPrice = Number(price);
+    if (isNaN(parsedPrice) || parsedPrice < 0 || parsedPrice > 100000) {
+      return res.status(400).json({ error: "Invalid product price" });
+    }
+    const parsedQuantity = quantity !== undefined ? Number(quantity) : 0;
+    if (isNaN(parsedQuantity) || parsedQuantity < 0) {
+      return res.status(400).json({ error: "Invalid product quantity" });
+    }
 
-  const product = {
-    id: Date.now(),
-    name: validator.escape(name.trim()).slice(0, 100),
-    aisle: typeof aisle === "string" ? validator.escape(aisle.trim()).slice(0, 50) : "Grocery",
-    price: parsedPrice,
-    quantity: Math.floor(parsedQuantity),
-    isNew: true,
-    imgfile:
-      typeof imgfile === "string" && imgfile.startsWith("/product-images/")
-        ? imgfile.slice(0, 100)
-        : "",
-    description:
-      typeof description === "string" ? description.trim().slice(0, 500) : "",
-  };
-  products.push(product);
-  res.status(201).json(product);
+    const product = {
+      id: Date.now(),
+      name: validator.escape(name.trim()).slice(0, 100),
+      aisle: typeof aisle === "string" ? validator.escape(aisle.trim()).slice(0, 50) : "Grocery",
+      price: parsedPrice,
+      quantity: Math.floor(parsedQuantity),
+      isNew: true,
+      imgfile:
+        typeof imgfile === "string" && imgfile.startsWith("/product-images/")
+          ? imgfile.slice(0, 100)
+          : "",
+      description:
+        typeof description === "string" ? description.trim().slice(0, 500) : "",
+    };
+    await productsCol.doc(String(product.id)).set(product);
+    res.status(201).json(product);
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.delete("/api/products/:id", (req, res) => {
-  const token = req.headers["x-admin-token"];
-  if (!ADMIN_TOKEN || !safeCompare(token, ADMIN_TOKEN)) {
-    return res.status(403).json({ error: "Forbidden: invalid admin token" });
+app.delete("/api/products/:id", async (req, res, next) => {
+  try {
+    const token = req.headers["x-admin-token"];
+    if (!ADMIN_TOKEN || !safeCompare(token, ADMIN_TOKEN)) {
+      return res.status(403).json({ error: "Forbidden: invalid admin token" });
+    }
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: "Invalid product id" });
+    }
+
+    const docRef = productsCol.doc(String(id));
+    const docSnap = await docRef.get();
+    if (docSnap.exists) {
+      await docRef.delete();
+    } else {
+      const querySnap = await productsCol.where("id", "==", id).get();
+      const batch = firestore.batch();
+      querySnap.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
   }
-  const id = Number(req.params.id);
-  if (isNaN(id)) {
-    return res.status(400).json({ error: "Invalid product id" });
-  }
-  products = products.filter((p) => p.id !== id);
-  res.json({ ok: true });
 });
 
 app.post("/api/concierge", async (req, res) => {
@@ -269,13 +338,11 @@ app.post("/api/concierge", async (req, res) => {
     const safeGoal = goal.trim().slice(0, 500);
 
     const ai = getAiClient();
-    if (!ai) {
-      return res.status(503).json({
-        error: "AI Concierge is currently unavailable (API key not configured)",
-      });
-    }
 
-    const inStock = products
+    const snapshot = await productsCol.get();
+    const items = snapshot.docs.map((doc) => doc.data());
+
+    const inStock = items
       .filter((p) => p.quantity > 0)
       .map((p) => `${p.name} ($${p.price}, ${p.aisle})`)
       .join(", ");
@@ -353,13 +420,19 @@ app.get("/api/export", (req, res) => {
   });
 });
 
-app.get("/search", (req, res) => {
-  const rawQ = typeof req.query.q === "string" ? req.query.q.trim() : "";
-  const safeQ = validator.escape(rawQ);
-  const results = products.filter((p) =>
-    p.name.toLowerCase().includes(rawQ.toLowerCase())
-  );
-  res.json({ query: safeQ, results });
+app.get("/search", async (req, res, next) => {
+  try {
+    const rawQ = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const safeQ = validator.escape(rawQ);
+    const snapshot = await productsCol.get();
+    const items = snapshot.docs.map((doc) => doc.data());
+    const results = items.filter((p) =>
+      p.name && p.name.toLowerCase().includes(rawQ.toLowerCase())
+    );
+    res.json({ query: safeQ, results });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.use((err, req, res, next) => {

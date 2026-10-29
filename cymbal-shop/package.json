@@ -9,6 +9,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^9.4.0",
     "@google/genai": "^1.0.0",
     "axios": "1.21.0",
     "body-parser": "2.4.0",
